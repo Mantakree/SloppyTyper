@@ -1,0 +1,8 @@
+node_modules/
+.sloppytyper/
+coverage/
+*.log
+.DS_Store
+.codex/
+.claude/
+.agents/
