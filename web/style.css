@@ -332,21 +332,13 @@ pre {
   0% {
     transform: translateY(calc(-1 * var(--rain-height, 160px)));
     opacity: 0;
-    color: #edfff1;
-    text-shadow: 0 0 12px #80ffa0;
   }
   15% {
     opacity: 1;
   }
-  75% {
-    color: #d6ffe3;
-    text-shadow: 0 0 9px #6bff96;
-  }
   100% {
     transform: translateY(0);
     opacity: 1;
-    color: inherit;
-    text-shadow: none;
   }
 }
 @keyframes rain-trail {

@@ -1,5 +1,6 @@
 import { Replay } from './replay.js';
 import { RainTimeline } from './rain.js';
+import { CodeView } from './code-view.js';
 
 const $ = id => document.getElementById(id);
 let session, replays, current = 0, keystrokes = 0, speed = 1, started = 0, finished = 0, sound = false, audio;
@@ -8,23 +9,7 @@ const rain = new RainTimeline();
 const reducedMotion = matchMedia('(prefers-reduced-motion: reduce)');
 let rainCleanup;
 const number = n => n.toLocaleString();
-const keywords = /^(?:import|from|export|class|private|public|async|await|const|let|var|if|else|return|new|function|def|self|for|while|try|catch|throw|interface|type|true|false|null|undefined|None|True|False|fn|pub|use|impl|struct|match|package|func)$/;
-
-function highlighted(text) {
-  const fragment = document.createDocumentFragment();
-  // Text nodes everywhere: source strings are never interpreted as HTML.
-  const tokens = text.match(/\/\/.*|#[^\n]*|"(?:[^"\\]|\\.)*"|'(?:[^'\\]|\\.)*'|`(?:[^`\\]|\\.)*`|\b[a-zA-Z_]\w*\b|\b\d+(?:\.\d+)?\b|[^\w"'`/#]+|./gu) || [];
-  for (const token of tokens) {
-    const span = document.createElement('span');
-    span.textContent = token;
-    if (token.startsWith('//') || token.startsWith('#')) span.className = 'syntax-comment';
-    else if (/^["'`]/.test(token)) span.className = 'syntax-string';
-    else if (keywords.test(token)) span.className = 'syntax-keyword';
-    else if (/^\d/.test(token)) span.className = 'syntax-number';
-    fragment.append(span.className ? span : document.createTextNode(token));
-  }
-  return fragment;
-}
+const codeView = new CodeView($('code'));
 
 function clearRain() {
   rain.clear();
@@ -37,59 +22,9 @@ function scheduleLanding(now) {
   if (deadline !== null) rainCleanup = setTimeout(scheduleRender, Math.max(1, deadline - now + 10));
 }
 
-function appendSource(parent, text, offset, falling, now) {
-  let start = 0;
-  for (const [position, drop] of falling) {
-    const index = position - offset;
-    if (index < 0 || index >= text.length) continue;
-    parent.append(highlighted(text.slice(start, index)));
-    const char = document.createElement('span');
-    char.className = 'rain-char';
-    char.textContent = drop.char;
-    char.dataset.trail = drop.trail;
-    // Positive delays reserve hidden character slots until their shuffled start;
-    // negative delays preserve in-flight positions across rapid re-renders.
-    char.style.setProperty('--rain-duration', `${drop.duration}ms`);
-    char.style.setProperty('--rain-delay', `${-(now - drop.start)}ms`);
-    char.style.setProperty('--rain-height', `${drop.height}px`);
-    parent.append(char);
-    start = index + drop.char.length;
-  }
-  parent.append(highlighted(text.slice(start)));
-}
-
 function renderCode(now) {
   const replay = replays[current];
-  const { text, cursor } = replay.view();
-  const allLines = text.split('\n');
-  const cursorLine = text.slice(0, cursor).split('\n').length - 1;
-  // Window large files around the cursor; full small files remain scrollable.
-  const start = allLines.length > 1000 ? Math.max(0, cursorLine - 80) : 0;
-  const end = allLines.length > 1000 ? Math.min(allLines.length, cursorLine + 170) : allLines.length;
-  const fragment = document.createDocumentFragment();
-  const falling = [...rain.drops].sort((a, b) => a[0] - b[0]);
-  let position = allLines.slice(0, start).reduce((sum, line) => sum + line.length + 1, 0);
-  let active;
-  for (let i = start; i < end; i++) {
-    const line = allLines[i];
-    const row = document.createElement('span');
-    row.className = 'code-line';
-    const lineNumber = document.createElement('span');
-    lineNumber.className = 'line-number'; lineNumber.textContent = i + 1;
-    const content = document.createElement('span');
-    content.className = 'line-content';
-    row.append(lineNumber, content);
-    if (i === cursorLine && !replay.done) {
-      row.classList.add('active-line');
-      const col = cursor - position;
-      appendSource(content, line.slice(0, col), position, falling, now);
-      const caret = document.createElement('span'); caret.className = 'caret'; content.append(caret); active = caret;
-      appendSource(content, line.slice(col), position + col, falling, now);
-    } else appendSource(content, line, position, falling, now);
-    fragment.append(row);
-    position += line.length + 1;
-  }
-  $('code').replaceChildren(fragment);
+  const { text, active } = codeView.render(replay, rain.drops, now);
   $('empty-code').hidden = text.length !== 0;
   $('empty-code').textContent = replay.done && replay.file.kind === 'deleted' ? 'File deleted.' : 'New file. Press any key to begin.';
   if (followCursor && active) {
