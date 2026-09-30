@@ -8,7 +8,6 @@ import unittest
 from unittest.mock import patch
 
 from src.demo import demo_session
-from src.storage import write_json
 from src.viewer import launch, render_html
 
 
@@ -75,7 +74,7 @@ class ExportTests(unittest.TestCase):
                 with patch('src.viewer.os.startfile', create=True) as open_file:
                     path = Path(launch(demo_session(), open_browser=False))
                     open_file.assert_not_called()
-                    self.assertEqual(list(Path(directory).iterdir()), [path])
+                    self.assertEqual([p.resolve() for p in Path(directory).iterdir()], [path])
                     copied = Path(directory) / 'copied.html'
                     copied.write_bytes(path.read_bytes())
                     path.unlink()
