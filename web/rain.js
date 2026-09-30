@@ -11,6 +11,7 @@ export class RainTimeline {
     this.drops = new Map();
     this.burns = new Set();
     this.startedAt = null;
+    this.replacementReadyAt = 0;
     this.advanceAt = null;
   }
 
@@ -34,10 +35,11 @@ export class RainTimeline {
     }
     const spread = characters.length > 1 ? Math.min(900, 160 + characters.length * 18) : 0;
     const interval = spread / Math.max(1, characters.length - 1);
+    const departure = Math.max(now, this.replacementReadyAt);
     characters.forEach(({ offset, char }, rank) => {
       const delay = rank * interval + (rank ? this.random() * interval * .6 : 0);
       this.drops.set(offset, {
-        char, start: now + delay, duration: 400 + this.random() * 340,
+        char, start: departure + delay, duration: 400 + this.random() * 340,
         height: 100 + this.random() * 150,
         trail: trails[Math.floor(this.random() * trails.length)],
       });
@@ -46,11 +48,14 @@ export class RainTimeline {
 
   remove(characters, now, reducedMotion = false) {
     if (reducedMotion) return;
+    // Give replacements a short, bounded head start for the departing text.
+    // Repeated batches use wall time, rather than accumulating queued delays.
+    if (characters.length) this.replacementReadyAt = now + 320;
     for (const position of characters) {
       this.burns.add({
-        char: position.char, position, start: now + this.random() * 180,
-        duration: 500 + this.random() * 350, height: 100 + this.random() * 130,
-        drift: (this.random() - .5) * 110,
+        char: position.char, position, start: now + this.random() * 100,
+        duration: 1150 + this.random() * 450, height: 260 + this.random() * 140,
+        drift: (this.random() < .5 ? -1 : 1) * (40 + this.random() * 60),
         trail: trails[Math.floor(this.random() * trails.length)],
       });
     }
@@ -93,12 +98,14 @@ export class RainTimeline {
   settle(now) {
     this.drops.clear();
     this.burns.clear();
+    this.replacementReadyAt = 0;
     if (this.advanceAt !== null) this.advanceAt = Math.min(this.advanceAt, Math.max(now + completionPause, this.minimumEnd()));
   }
 
   clear() {
     this.drops.clear();
     this.burns.clear();
+    this.replacementReadyAt = 0;
     this.startedAt = null;
     this.advanceAt = null;
   }

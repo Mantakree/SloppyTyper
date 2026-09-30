@@ -19,6 +19,39 @@ test('red removals lift from their original position, drift outward, and burn aw
   assert.equal(particlePose(particle, 700, true).alpha, 0);
 });
 
+test('red particles stay bright through most of their higher flight', () => {
+  const particle = { start: 100, duration: 1400, height: 320, drift: 70 };
+  const mid = particlePose(particle, 800, true);
+  assert.ok(mid.y < -160, 'the character has already risen more than halfway');
+  assert.ok(mid.x > 35, 'outward travel separates it from incoming rain');
+  assert.ok(mid.alpha > .8, 'the red head remains clearly visible at mid-flight');
+  assert.equal(particlePose(particle, 1500, true).alpha, 0);
+});
+
+test('dense red effects use two draws per particle and reuse sprites across frames', () => {
+  const burns = new Set(Array.from({ length: 300 }, (_, i) => ({
+    char: String(i % 10), trail: 'ア\nイ\nウ', position: { x: 100 + i % 20 * 10, y: 450 },
+    start: 100, duration: 1400, height: 320, drift: 70,
+  })));
+  let drawings = 0, lookups = 0;
+  const effects = Object.assign(Object.create(CodeEffects.prototype), {
+    ctx: { clearRect() {}, drawImage() { drawings++; } }, width: 800, height: 600, viewport: { scrollTop: 0 },
+    sprites: { size: 14, get() { lookups++; return { canvas: {}, padding: 8, inset: 12, width: 45, height: 90 }; } },
+    timeline: { drops: new Map(), burns }, wake() {},
+  });
+  effects.draw(800);
+  assert.equal(drawings, 600, 'heads, trails and embers need only two stamps per particle');
+  assert.equal(lookups, 600);
+  drawings = 0;
+  effects.draw(900);
+  assert.equal(drawings, 600);
+  assert.equal(lookups, 600, 'there are no repeated sprite lookups or mid-flight color variants');
+  effects.viewport.scrollTop = 1000;
+  drawings = 0;
+  effects.draw(950);
+  assert.equal(drawings, 0, 'offscreen burns cost no canvas draws');
+});
+
 test('new text remeasures falling targets that may wrap, while earlier lines keep cached coordinates', t => {
   const previousRatio = Object.getOwnPropertyDescriptor(globalThis, 'devicePixelRatio');
   Object.defineProperty(globalThis, 'devicePixelRatio', { value: 1, configurable: true });

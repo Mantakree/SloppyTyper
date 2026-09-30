@@ -139,3 +139,25 @@ test('red deletion particles count toward completion and are cleared by reset an
   rain.clear();
   assert.equal(rain.state(7100).pending, 0);
 });
+
+test('red burns last longer, fly higher, and depart before nearby replacement rain', () => {
+  const rain = new RainTimeline(seededRandom());
+  rain.remove(Array.from({ length: 20 }, () => ({ char: 'x', x: 100, y: 400 })), 100);
+  for (const burn of rain.burns) {
+    assert.ok(burn.duration >= 1150 && burn.duration < 1600);
+    assert.ok(burn.height >= 260 && burn.height < 400);
+    assert.ok(Math.abs(burn.drift) >= 40);
+    assert.ok(burn.start < 200);
+  }
+  rain.add([{ offset: 0, text: 'a' }], 100);
+  assert.equal(rain.drops.get(0).start, 420);
+  rain.remove([{ char: 'y', x: 120, y: 400 }], 150);
+  rain.add([{ offset: 1, text: 'b' }], 150);
+  assert.equal(rain.drops.get(1).start, 470, 'the head start does not accumulate into a growing queue');
+  assert.equal(rain.drops.get(0).start, 420, 'already scheduled rain keeps its original timing');
+  rain.add([{ offset: 2, text: 'c' }], 1000);
+  assert.equal(rain.drops.get(2).start, 1000, 'normal green input resumes immediately after the head start');
+  rain.clear();
+  rain.add([{ offset: 0, text: 'd' }], 160);
+  assert.equal(rain.drops.get(0).start, 160, 'reset cancels the head start');
+});

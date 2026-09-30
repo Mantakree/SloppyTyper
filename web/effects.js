@@ -14,7 +14,9 @@ class Sprites {
     const ctx = canvas.getContext('2d');
     ctx.font = this.font;
     const padding = 8, step = this.size * 1.05;
-    const width = Math.ceil(Math.max(...lines.map(line => ctx.measureText(line).width)) + padding * 2);
+    const embers = trail && reverse;
+    const inset = embers ? 12 : 0;
+    const width = Math.ceil(Math.max(...lines.map(line => ctx.measureText(line).width)) + padding * 2 + inset * 2);
     const height = Math.ceil(lines.length * step + padding * 2);
     canvas.width = Math.ceil(width * this.ratio);
     canvas.height = Math.ceil(height * this.ratio);
@@ -26,9 +28,18 @@ class Sprites {
     ctx.shadowBlur = 5;
     lines.forEach((line, i) => {
       ctx.globalAlpha = trail ? .12 + .55 * (reverse ? lines.length - i : i + 1) / lines.length : 1;
-      ctx.fillText(line, padding, padding + i * step);
+      ctx.fillText(line, padding + inset, padding + i * step);
     });
-    const sprite = { canvas, width, height, padding, length: lines.length * step };
+    if (embers) {
+      // Bake the sparks into the shared trail once, instead of issuing two
+      // additional translucent draw calls for every red character every frame.
+      ctx.fillStyle = ctx.shadowColor = '#ffbe68';
+      ctx.globalAlpha = .85;
+      ctx.fillText('·', padding + inset + 10, padding + step * 1.7);
+      ctx.globalAlpha = .6;
+      ctx.fillText('·', padding + inset - 9, padding + step * 3.2);
+    }
+    const sprite = { canvas, width, height, padding, inset, length: lines.length * step };
     if (this.cache.size >= 512) this.cache.delete(this.cache.keys().next().value);
     this.cache.set(key, sprite);
     return sprite;
@@ -38,9 +49,9 @@ class Sprites {
 export function particlePose(particle, now, burning = false) {
   const progress = Math.max(0, Math.min(1, (now - particle.start) / particle.duration));
   if (burning) return {
-    x: particle.drift * progress * progress,
-    y: -particle.height * progress ** 1.25,
-    alpha: now < particle.start ? 1 : Math.max(0, 1 - progress ** 1.7),
+    x: particle.drift * (1 - (1 - progress) ** 1.5),
+    y: -particle.height * (1 - (1 - progress) ** 1.35),
+    alpha: now < particle.start ? 1 : Math.max(0, 1 - progress ** 3),
     progress,
   };
   return { x: 0, y: -particle.height * (1 - progress * progress), alpha: Math.min(1, progress * 8), progress };
@@ -102,7 +113,7 @@ export class CodeEffects {
   stamp(sprite, x, y, alpha = 1) {
     if (alpha <= 0 || x < -60 || x > this.width + 60 || y < -sprite.height || y > this.height + sprite.height) return;
     this.ctx.globalAlpha = alpha;
-    this.ctx.drawImage(sprite.canvas, x - sprite.padding, y - sprite.padding, sprite.width, sprite.height);
+    this.ctx.drawImage(sprite.canvas, x - sprite.padding - (sprite.inset || 0), y - sprite.padding, sprite.width, sprite.height);
   }
 
   draw(now) {
@@ -126,13 +137,15 @@ export class CodeEffects {
       if (!pose.alpha) continue;
       const x = burn.position.x + pose.x, y = burn.position.y - scroll + pose.y;
       if (y < -100 || y > this.height + 100) continue;
-      this.stamp(this.sprites.get(burn.trail, '#ff453d', true), x, y + this.sprites.size, pose.alpha * Math.min(1, pose.progress * 4));
-      this.stamp(this.sprites.get(burn.char, pose.progress > .45 ? '#ff9951' : '#ff524b'), x, y, pose.alpha);
-      if (pose.progress > .35) {
-        const ember = this.sprites.get('·', '#ffbe68');
-        this.stamp(ember, x + 12 * pose.progress, y + 18 * pose.progress, pose.alpha);
-        this.stamp(ember, x - 9 * pose.progress, y + 30 * pose.progress, pose.alpha * .7);
-      }
+      // Retain resolved sprites throughout the flight: no per-frame cache-key
+      // building, color swaps, or new glyph rasterization halfway through a burn.
+      if (burn.visual?.atlas !== this.sprites) burn.visual = {
+        atlas: this.sprites,
+        trail: this.sprites.get(burn.trail, '#ff453d', true),
+        head: this.sprites.get(burn.char, '#ff6459'),
+      };
+      this.stamp(burn.visual.trail, x, y + this.sprites.size, pose.alpha * Math.min(1, pose.progress * 5));
+      this.stamp(burn.visual.head, x, y, pose.alpha);
     }
     this.ctx.globalAlpha = 1;
     if (moving) this.wake();

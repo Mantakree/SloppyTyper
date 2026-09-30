@@ -53,8 +53,8 @@ function render() {
     // Read old glyph positions before any DOM writes. Multiple key events in
     // one frame become one edit and one layout pass, including mixed edits.
     const removed = motionOff ? [] : [...codeView.positions(charactersIn(change.removed), $('code-scroll')).values()];
-    rain.add(change.inserted, now, motionOff);
     rain.remove(removed, now, motionOff);
+    rain.add(change.inserted, now, motionOff);
     if (replay.done) rain.markComplete(now);
     rainState = rain.state(now);
   }
