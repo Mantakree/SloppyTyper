@@ -177,9 +177,7 @@ window.addEventListener('keydown', event => {
 });
 
 try {
-  const response = await fetch('session.json');
-  if (!response.ok) throw new Error('This local session is unavailable. Launch SloppyTyper again.');
-  session = await response.json();
+  session = JSON.parse($('session-data').textContent);
   if (!session.files?.length) throw new Error('Nothing to replay. Your source files have not changed.');
   document.title = `${session.repo} / SloppyTyper`;
   if (session.skipped.length) $('skipped').textContent = `${session.skipped.length} unsupported file(s) skipped`;
@@ -192,5 +190,5 @@ try {
 } catch (error) {
   $('error').hidden = false; $('error').textContent = error.message;
   $('mash').disabled = true;
-  $('phase').textContent = 'CONNECTION LOST';
+  $('phase').textContent = 'REPLAY UNAVAILABLE';
 }

@@ -1,87 +1,105 @@
 # SloppyTyper
 
-**The AI did the work. You get the keystrokes.**
+A neon-green victory lap for finished code changes, inspired by [Hacker Typer](https://hackertyper.net/). Your assistant finishes a turn, SloppyTyper shows the original source, and random keystrokes animate the edits.
 
-A local, neon-green victory lap for AI-written code, inspired by [Hacker Typer](https://hackertyper.net/). Your assistant finishes a turn, SloppyTyper shows the original source, and random keystrokes animate the edits until you have personally achieved an unreasonable amount of pride and accomplishment.
+**Replay never writes to your repository.** The page animates copies. Closing it, skipping a file, or never touching a key has no effect on your work.
 
-**Replay never writes to your repository.** It animates copies. Closing the page, skipping a file, or never touching a key has no effect on your real work.
+## Try it on Windows
 
-## Try it
+Requires **Python 3.9+**, **Git**, and a browser. No Node, npm, pip packages, server, or background service is needed to use it.
 
-Requires **Node.js 22+** and **Git** on PATH. Windows, macOS, and Linux are supported.
-
-```sh
+```powershell
 git clone https://github.com/Mantakree/SloppyTyper.git
 cd SloppyTyper
-npm install
-npm start
+python sloppytyper.py demo
 ```
 
-This opens a synthetic demo in your default browser. Mash letters, numbers, space, enter, or backspace. The actual key doesn't matter. Each key performs one character insertion or deletion; choose 5, 10, 20, or 50 characters per key to move faster. The full-width code view wraps long lines, and newly inserted characters rain down into place with Matrix-style trails. Each batch falls in shuffled order with staggered starts and varied speeds. Added code stays a brighter, glowing green; removed characters turn red, rise high into reverse Matrix trails, and burn away as embers. The red flight lasts longer and gets a short head start before replacement text rains in. When a file is finished, SloppyTyper waits for all falling and burning characters to finish and holds the completed source for at least one second before moving to the next file. Each typed file stays on screen for at least three seconds from its first keypress, so even a tiny file finished in one batch gets time to be enjoyed. Extra keys during that pause do not skip ahead. Reduced-motion preferences disable the effect. File selection, skip, restart, optional synthesized sound, and a completion screen are included. Browser shortcuts and tab navigation keep working. The big green button also works by mouse or touch.
+If your Python installation uses the Windows launcher, `py sloppytyper.py demo` works too.
+
+Python generates one self-contained HTML file and opens it in your default browser, then exits. Double-click the file to replay it again, including offline. All code, styling, and animations are embedded. JavaScript runs inside the browser; it doesn't need Node. Some embedded app browsers block local files; use your normal Windows browser to open the HTML.
+
+Mash letters, numbers, space, enter, or backspace. Each key performs 1, 5, 10, 20, or 50 character edits. The full-width code view wraps long lines. Insertions rain down in shuffled order and remain brighter green; deletions glow red, fly upward, and burn away. Red characters get a head start before replacement text falls. Each completed file waits for all effects to finish, then stays visible for at least one second. Tiny files stay on screen for at least three seconds after their first keypress. Extra keys during that pause don't skip ahead. Reduced-motion preferences, file selection, skip, restart, and optional synthesized sound are supported.
 
 ## Codex and Claude Code
 
-From this checkout:
-
-```sh
-node bin/sloppytyper.js install
+```powershell
+python sloppytyper.py install
 ```
 
-This installs `UserPromptSubmit` and `Stop` command hooks plus the shared `sloppytyper` skill for both hosts. Use `--target codex` or `--target claude` to install only one. It merges existing hook configuration and backs up existing files before changes. It does not enable broad shell permissions or change agent approval settings.
+This installs `UserPromptSubmit` and `Stop` hooks plus the shared `sloppytyper` skill for both hosts. Use `--target codex` or `--target claude` for just one. The installer replaces earlier SloppyTyper Node hooks, preserves unrelated settings, and backs up configuration before changing it. It pins the Python interpreter used during installation, so moving Python or this checkout requires reinstalling.
 
-- **Codex:** hooks in `$CODEX_HOME/hooks.json` (defaults to `~/.codex/hooks.json`); skill in that directory's `skills/sloppytyper`. Start a new session, then review and trust the two hook definitions in **`/hooks`**. Codex skips untrusted hooks. If hooks are disabled in your settings or by your organization, they will not run.
-- **Claude Code:** hooks in `~/.claude/settings.json`; skill in `~/.claude/skills/sloppytyper`. Restart Claude Code after installation; inspect the installed hooks with `/hooks`.
+- **Codex:** hooks in `$CODEX_HOME/hooks.json` (default `~/.codex/hooks.json`); skill in that directory's `skills/sloppytyper`. Start a new session and review/trust the updated definitions in `/hooks`. Disabled or untrusted hooks won't run.
+- **Claude Code:** hooks in `~/.claude/settings.json`; skill in `~/.claude/skills/sloppytyper`. Restart the coding session and inspect hooks with `/hooks`.
 
-Keep this checkout at its installed path and keep Node on PATH. Moving the checkout requires reinstalling. No MCP server, API key, model call, or always-running daemon is required. These integrations target **local** coding sessions with filesystem access, including Codex desktop/CLI and Claude Code. A cloud session cannot open a browser on your machine using this local hook.
+These integrations run in local Windows coding sessions with filesystem access. They don't change shell approval settings. No MCP server, API key, or model call is involved.
 
-The start hook snapshots the current source, including pre-existing uncommitted work. The stop hook compares the final source with that baseline and opens a page only if it changed. Commits during the turn do not lose the replay. Duplicate stop events are quiet. Hook failures never block a prompt, resume the agent, or prevent the turn from ending.
+The start hook snapshots current source, including pre-existing dirty files. The stop hook compares the final source with that baseline and generates a replay only if something changed. Commits made during the turn don't lose edits. Duplicate stops are quiet. Hook errors never block a prompt or resume the agent.
 
-“Conversation closes” means the assistant **finishes responding to a turn**, not that you close the app. The host cannot know that you will never send another message. Each later turn gets its own baseline. Changes made concurrently by you or another agent in the same checkout can appear too; use separate worktrees for independent sessions. Changing to another repository during a turn requires a new baseline.
+“Conversation closes” means the assistant finishes a turn. Each later turn gets a new baseline. Concurrent edits in the same checkout can also appear; separate worktrees avoid mixing unrelated work.
 
-Official integration references: [Codex hooks](https://learn.chatgpt.com/docs/hooks) and [Claude Code hooks](https://code.claude.com/docs/en/hooks).
+Integration references: [Codex hooks](https://learn.chatgpt.com/docs/hooks), [Claude Code hooks](https://code.claude.com/docs/en/hooks).
 
 ## Manual replays
 
-Replay all source changes currently in a repository against HEAD:
+Replay working-tree changes against HEAD, or another commit:
 
-```sh
-node bin/sloppytyper.js replay --repo /path/to/repository
-node bin/sloppytyper.js replay --repo /path/to/repository --base main
+```powershell
+python sloppytyper.py replay --repo "C:\path\to\repository"
+python sloppytyper.py replay --repo "C:\path\to\repository" --base main
 ```
 
-These commands include staged, unstaged, and untracked source files. A rename appears as removal of the old path and creation of the new one. HEAD must exist for this mode.
+These include staged, unstaged, and untracked source. A rename appears as deletion plus creation. For a committed range (for example, the last two commits):
 
-For exact before/after snapshots, including a repository without any commits:
-
-```sh
-node bin/sloppytyper.js begin --repo /path/to/repository --session my-unique-turn
-# Do the real work with your coding assistant.
-node bin/sloppytyper.js end --repo /path/to/repository --session my-unique-turn
+```powershell
+python sloppytyper.py replay --base HEAD~2 --to HEAD
 ```
 
-Choose a different session ID for each independent task. The `end` command prints the replay URL. Add `--no-open` to print it without opening the browser. The shared skill provides this fallback when hooks are unavailable; a skill by itself cannot guarantee automatic invocation at every turn.
+For exact before/after snapshots, including a repository without commits:
 
-## What gets stored
+```powershell
+python sloppytyper.py begin --repo "C:\path\to\repository" --session my-unique-turn
+# Work with your coding assistant.
+python sloppytyper.py end --repo "C:\path\to\repository" --session my-unique-turn
+```
 
-The viewer serves a fixed session from `127.0.0.1` on a randomly assigned port, behind a random URL token. It has no write endpoints, telemetry, remote fonts, or external assets. Source is rendered as text, never evaluated. The server exits after two hours; an already loaded page continues working.
+Use a unique session ID for each independent task. The command prints the absolute HTML path. Add `--no-open` to generate it without opening a browser. The skill provides this fallback when hooks aren't available; a skill alone isn't a lifecycle trigger.
 
-Before/after snapshots are stored locally in `~/.sloppytyper`, outside the replayed repository. Set `SLOPPYTYPER_HOME` to change that location; choose a directory outside your source checkout. Files older than seven days are removed on the next capture/replay, or with `node bin/sloppytyper.js prune`. These are local copies of your source; this is not an encrypted vault. Installation writes agent configuration, and snapshots write the cache; **typing in the viewer writes neither**.
+Previously saved Node session JSON can be converted without a server:
 
-Common code, configuration, and documentation extensions are included. Binary files, invalid UTF-8, symlinks, common generated directories, lockfiles, and conventional credential filenames are excluded. Git-ignored untracked files are excluded. Individual files above 256 KiB or source beyond a 16 MiB snapshot budget are skipped. The page reports unsupported-file skips. These filters are not a secret scanner. Large rewrites use a bounded line diff if a character diff takes too long.
+```powershell
+python sloppytyper.py render --file "C:\path\to\session.json"
+```
+
+## Local storage
+
+Before/after snapshots and generated HTML live in `~/.sloppytyper`. `SLOPPYTYPER_HOME` can change the directory, but it must remain outside the replayed repository. Cache files older than seven days are removed on later capture/replay, or by `python sloppytyper.py prune`. Copy an HTML file elsewhere if you want to keep it. Its contents never expire and need no other files.
+
+These files contain local copies of source; they aren't encrypted. There is no telemetry or network access. Source is embedded as escaped, inert JSON and rendered as text, never executed. Typing has no filesystem access.
+
+Common code, configuration, and documentation extensions are included. Binary files, invalid UTF-8, symlinks, generated directories, lockfiles, conventional credential filenames, and Git-ignored untracked files are excluded. Files above 256 KiB or beyond a 16 MiB snapshot budget are skipped. Filters aren't a secret scanner. Diffs preserve Unicode and line endings; large rewrites use coarser edits to keep generation bounded.
 
 ## Uninstall
 
-```sh
-node bin/sloppytyper.js uninstall
+```powershell
+python sloppytyper.py uninstall
 ```
 
-Removes only SloppyTyper's hook entries and its installed skill file. Other hooks and settings stay in place. Cache files and the checkout remain available; existing viewers expire automatically. Restart coding sessions after uninstalling.
+Removes only SloppyTyper's hooks and installed skill file. Other settings, cache files, saved replays, and the checkout remain. Restart coding sessions afterward.
 
 ## Development
 
-```sh
+The backend and exporter tests use only Python and Git:
+
+```powershell
+python -B -m unittest discover -s test -p "test_*.py"
+```
+
+The existing browser unit tests optionally use Node 22+ and `linkedom` **for development only**:
+
+```powershell
+npm ci
 npm test
 npm run check
 ```
 
-The Node test suite checks exact replay, Unicode/line endings, new/deleted/renamed files, dirty baselines, commits during a turn, duplicate stops, configuration preservation, HTTP restrictions, and repository/index immutability. CI runs on Windows, macOS, and Linux with Node 22 and 24. The browser UI uses plain HTML/CSS/JavaScript; the only runtime dependency is `diff`. Restart the demo after changing assets, because each viewer snapshots its assets at launch.
+Tests cover repository/index immutability, dirty baselines, commits during turns, duplicate hooks, config migration/preservation, safe standalone exports, exact replay, Unicode, completion timing, and canvas rendering. CI targets Windows. Generate a new demo after editing browser assets; each HTML file is a frozen copy of the viewer and session.

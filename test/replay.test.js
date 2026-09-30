@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { makeSession } from '../src/session.js';
+import { makeSession } from './python-session.js';
 import { Replay } from '../web/replay.js';
 
 const meta = { root: '/test', name: 'test', branch: 'main', skipped: [] };

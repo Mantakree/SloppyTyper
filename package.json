@@ -1,23 +1,15 @@
 {
   "name": "sloppytyper",
-  "version": "0.1.0",
-  "description": "A read-only victory lap for AI-written code.",
+  "version": "0.2.0",
+  "description": "Optional developer tests for SloppyTyper's browser code. Runtime is Python.",
   "type": "module",
   "private": true,
   "engines": {
     "node": ">=22"
   },
-  "bin": {
-    "sloppytyper": "bin/sloppytyper.js"
-  },
   "scripts": {
-    "start": "node bin/sloppytyper.js demo",
-    "demo": "node bin/sloppytyper.js demo",
-    "test": "node --test",
-    "check": "node --check bin/sloppytyper.js && node --check web/app.js && node --check web/code-view.js && node --check web/effects.js"
-  },
-  "dependencies": {
-    "diff": "^8.0.2"
+    "test": "node --test test/*.test.js",
+    "check": "node --check web/app.js && node --check web/code-view.js && node --check web/effects.js && node --check web/replay.js && node --check web/rain.js"
   },
   "devDependencies": {
     "linkedom": "^0.18.13"
