@@ -17,7 +17,7 @@ npm install
 npm start
 ```
 
-This opens a synthetic demo in your default browser. Mash letters, numbers, space, enter, or backspace. The actual key doesn't matter. Each key performs one character insertion or deletion; choose 5, 20, or 50 characters per key to move faster. The full-width code view wraps long lines, and newly inserted characters rain down into place with Matrix-style trails. Reduced-motion preferences disable the effect. File selection, skip, restart, optional synthesized sound, and a completion screen are included. Browser shortcuts and tab navigation keep working. The big green button also works by mouse or touch.
+This opens a synthetic demo in your default browser. Mash letters, numbers, space, enter, or backspace. The actual key doesn't matter. Each key performs one character insertion or deletion; choose 5, 20, or 50 characters per key to move faster. The full-width code view wraps long lines, and newly inserted characters rain down into place with Matrix-style trails. Each batch falls in shuffled order with staggered starts and varied speeds. When a file is finished, SloppyTyper waits for every character to land, holds the completed source for one second, then moves to the next file. Extra keys during that pause do not skip ahead. Reduced-motion preferences disable the effect. File selection, skip, restart, optional synthesized sound, and a completion screen are included. Browser shortcuts and tab navigation keep working. The big green button also works by mouse or touch.
 
 ## Codex and Claude Code
 

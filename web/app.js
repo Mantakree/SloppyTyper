@@ -1,11 +1,11 @@
 import { Replay } from './replay.js';
+import { RainTimeline } from './rain.js';
 
 const $ = id => document.getElementById(id);
 let session, replays, current = 0, keystrokes = 0, speed = 1, started = 0, finished = 0, sound = false, audio;
 let rendering = false, followCursor = false;
-const rain = new Map();
+const rain = new RainTimeline();
 const reducedMotion = matchMedia('(prefers-reduced-motion: reduce)');
-const rainGlyphs = [...'アイウエオカキクケコサシスセソタチツテトナニヌネノ012345789'];
 let rainCleanup;
 const number = n => n.toLocaleString();
 const keywords = /^(?:import|from|export|class|private|public|async|await|const|let|var|if|else|return|new|function|def|self|for|while|try|catch|throw|interface|type|true|false|null|undefined|None|True|False|fn|pub|use|impl|struct|match|package|func)$/;
@@ -31,23 +31,10 @@ function clearRain() {
   clearTimeout(rainCleanup);
 }
 
-function addRain(inserted) {
-  if (reducedMotion.matches) return;
-  const now = performance.now();
-  for (const insertion of inserted) {
-    let offset = insertion.offset;
-    for (const char of insertion.text) {
-      if (!/\s/u.test(char)) rain.set(offset, {
-        char, start: now, duration: 460 + Math.random() * 180,
-        trail: Array.from({ length: 5 }, () => rainGlyphs[Math.floor(Math.random() * rainGlyphs.length)]).join('\n'),
-      });
-      offset += char.length;
-    }
-  }
-  // Keep rapid mashing bounded, and settle the final characters before celebrating.
-  while (rain.size > 400) rain.delete(rain.keys().next().value);
+function scheduleLanding(now) {
   clearTimeout(rainCleanup);
-  rainCleanup = setTimeout(scheduleRender, 660);
+  const deadline = rain.nextWake(now);
+  if (deadline !== null) rainCleanup = setTimeout(scheduleRender, Math.max(1, deadline - now + 10));
 }
 
 function appendSource(parent, text, offset, falling, now) {
@@ -60,9 +47,11 @@ function appendSource(parent, text, offset, falling, now) {
     char.className = 'rain-char';
     char.textContent = drop.char;
     char.dataset.trail = drop.trail;
-    // A negative delay preserves each drop's position across rapid re-renders.
+    // Positive delays reserve hidden character slots until their shuffled start;
+    // negative delays preserve in-flight positions across rapid re-renders.
     char.style.setProperty('--rain-duration', `${drop.duration}ms`);
     char.style.setProperty('--rain-delay', `${-(now - drop.start)}ms`);
+    char.style.setProperty('--rain-height', `${drop.height}px`);
     parent.append(char);
     start = index + drop.char.length;
   }
@@ -78,7 +67,7 @@ function renderCode(now) {
   const start = allLines.length > 1000 ? Math.max(0, cursorLine - 80) : 0;
   const end = allLines.length > 1000 ? Math.min(allLines.length, cursorLine + 170) : allLines.length;
   const fragment = document.createDocumentFragment();
-  const falling = [...rain].sort((a, b) => a[0] - b[0]);
+  const falling = [...rain.drops].sort((a, b) => a[0] - b[0]);
   let position = allLines.slice(0, start).reduce((sum, line) => sum + line.length + 1, 0);
   let active;
   for (let i = start; i < end; i++) {
@@ -114,7 +103,14 @@ function renderCode(now) {
 function render() {
   rendering = false;
   const now = performance.now();
-  for (const [position, drop] of rain) if (now - drop.start >= drop.duration || reducedMotion.matches) rain.delete(position);
+  let rainState = rain.state(now);
+  if (rainState.ready && replays.some(r => !r.done)) {
+    current = replays.findIndex(r => !r.done);
+    clearRain();
+    rainState = rain.state(now);
+    followCursor = false;
+    $('code-scroll').scrollTop = 0;
+  }
   const replay = replays[current];
   const progress = replays.reduce((n, r) => n + r.progress, 0);
   const doneCount = replays.filter(r => r.done).length;
@@ -123,26 +119,29 @@ function render() {
   $('files').value = String(current);
   $('file-kind').textContent = replay.file.kind.toUpperCase();
   $('file-progress').textContent = `${number(replay.progress)} / ${number(replay.total)} CHARACTERS`;
-  $('phase').textContent = complete ? 'COMPLETE' : replay.done ? 'FILE COMPLETE' : keystrokes ? 'REPLAYING' : 'READY';
+  const holding = rainState.completing && !rainState.ready;
+  $('phase').textContent = replay.done && rainState.pending ? 'SETTLING' : holding ? 'FILE COMPLETE' : complete ? 'COMPLETE' : replay.done ? 'FILE COMPLETE' : keystrokes ? 'REPLAYING' : 'READY';
   $('percent').textContent = `${percent}%`;
   $('progress').value = percent;
   $('keys').textContent = number(keystrokes);
   $('completed-files').textContent = `${doneCount} / ${replays.length}`;
   $('skip').disabled = replay.done;
+  $('files').disabled = rainState.pending > 0 || holding;
   for (const [i, option] of [...$('files').options].entries()) {
     option.textContent = `${replays[i].done ? '✓ ' : ''}${replays[i].file.path}`;
   }
-  $('completion').hidden = !complete || rain.size > 0;
-  $('mash-title').textContent = complete ? 'REPLAY COMPLETE' : 'MASH ANY KEY';
-  $('mash').disabled = complete;
+  $('completion').hidden = !complete || !rainState.ready;
+  $('mash-title').textContent = holding ? (rainState.pending ? 'SETTLING' : 'FILE COMPLETE') : complete ? 'REPLAY COMPLETE' : 'MASH ANY KEY';
+  $('mash').disabled = complete || holding;
   if (complete) {
     finished ||= Date.now();
     $('end-keys').textContent = number(keystrokes);
     $('end-time').textContent = `${started ? Math.max(1, Math.round((finished - started) / 1000)) : 0}s`;
     $('end-files').textContent = replays.length;
-    $('announcement').textContent = 'Replay complete.';
+    if (rainState.ready) $('announcement').textContent = 'Replay complete.';
   }
   renderCode(now);
+  scheduleLanding(now);
 }
 
 function scheduleRender() { if (!rendering) { rendering = true; requestAnimationFrame(render); } }
@@ -161,10 +160,17 @@ function blip() {
 }
 function mash() {
   if (!replays || replays.every(r => r.done)) return;
+  const now = performance.now();
+  const rainState = rain.state(now);
+  if (rainState.completing) return;
+  // Apply backpressure during extreme key repeat instead of making in-flight
+  // characters appear instantly to enforce an animation-count limit.
+  if (rainState.pending > 1500) return;
   started ||= Date.now();
   if (replays[current].done) { clearRain(); current = replays.findIndex(r => !r.done); }
   keystrokes++;
-  addRain(replays[current].step(speed).inserted);
+  rain.add(replays[current].step(speed).inserted, now, reducedMotion.matches);
+  if (replays[current].done) rain.markComplete(now);
   followCursor = true;
   blip(); scheduleRender();
 }
@@ -180,17 +186,23 @@ function reset() {
 
 $('mash').addEventListener('click', mash);
 $('skip').addEventListener('click', () => {
-  if (!replays) return;
-  clearRain();
+  if (!replays || replays[current].done) return;
   replays[current].step(replays[current].total);
-  if (!replays.every(r => r.done)) current = replays.findIndex(r => !r.done);
+  rain.markComplete(performance.now());
   followCursor = true; render();
 });
 $('reset').addEventListener('click', reset);
 $('again').addEventListener('click', () => { reset(); $('code-scroll').focus(); });
 $('files').addEventListener('change', () => {
+  const state = rain.state(performance.now());
+  if (state.pending || (state.completing && !state.ready)) { $('files').value = String(current); return; }
   clearRain(); current = Number($('files').value); followCursor = true;
+  if (replays.every(r => r.done)) rain.advanceAt = performance.now();
   render(); $('code-scroll').focus();
+});
+reducedMotion.addEventListener('change', () => {
+  if (reducedMotion.matches) rain.settle(performance.now());
+  if (replays) scheduleRender();
 });
 $('sound').addEventListener('click', () => {
   sound = !sound; $('sound').setAttribute('aria-pressed', String(sound));

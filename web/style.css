@@ -330,7 +330,7 @@ pre {
 }
 @keyframes rain-in {
   0% {
-    transform: translateY(-160px);
+    transform: translateY(calc(-1 * var(--rain-height, 160px)));
     opacity: 0;
     color: #edfff1;
     text-shadow: 0 0 12px #80ffa0;
