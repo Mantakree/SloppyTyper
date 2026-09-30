@@ -1,5 +1,6 @@
 const glyphs = [...'アイウエオカキクケコサシスセソタチツテトナニヌネノ012345789'];
 const completionPause = 1000;
+const minimumFileDuration = 3000;
 
 // Animation time is independent of replay progress: writing the last character
 // doesn't mean that the visible characters have finished landing.
@@ -7,10 +8,13 @@ export class RainTimeline {
   constructor(random = Math.random) {
     this.random = random;
     this.drops = new Map();
+    this.startedAt = null;
     this.advanceAt = null;
   }
 
   add(inserted, now, reducedMotion = false) {
+    // Count typing even for deletions, whitespace, and reduced-motion replays.
+    this.startedAt ??= now;
     if (reducedMotion) return;
     const characters = [];
     for (const insertion of inserted) {
@@ -40,8 +44,13 @@ export class RainTimeline {
 
   markComplete(now) {
     // Repeated key presses must neither bypass nor extend the enjoyment pause.
-    this.advanceAt ??= Math.max(now, this.lastLanding()) + completionPause;
+    this.advanceAt ??= Math.max(
+      Math.max(now, this.lastLanding()) + completionPause,
+      this.minimumEnd(),
+    );
   }
+
+  minimumEnd() { return this.startedAt === null ? 0 : this.startedAt + minimumFileDuration; }
 
   lastLanding() {
     let latest = 0;
@@ -67,11 +76,12 @@ export class RainTimeline {
 
   settle(now) {
     this.drops.clear();
-    if (this.advanceAt !== null) this.advanceAt = Math.min(this.advanceAt, now + completionPause);
+    if (this.advanceAt !== null) this.advanceAt = Math.min(this.advanceAt, Math.max(now + completionPause, this.minimumEnd()));
   }
 
   clear() {
     this.drops.clear();
+    this.startedAt = null;
     this.advanceAt = null;
   }
 }

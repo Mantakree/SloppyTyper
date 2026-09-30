@@ -1,6 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { RainTimeline } from '../web/rain.js';
+import { Replay } from '../web/replay.js';
 
 function seededRandom() {
   let seed = 2026;
@@ -33,13 +34,14 @@ test('shuffled drops preserve Unicode offsets and single characters start immedi
 
 test('file completion waits for overlapping batches to land, then a full second', () => {
   const rain = new RainTimeline(seededRandom());
-  rain.add([{ offset: 0, text: 'abcdef' }], 100);
-  rain.add([{ offset: 6, text: 'ghijklmnopqrstuvwxyz' }], 150);
+  rain.add([], 100); // Earlier deletions started this file before the final bursts.
+  rain.add([{ offset: 0, text: 'abcdef' }], 3000);
+  rain.add([{ offset: 6, text: 'ghijklmnopqrstuvwxyz' }], 3150);
   const lastLanding = rain.lastLanding();
-  rain.markComplete(150);
-  rain.markComplete(900); // Extra input cannot extend or bypass the pause.
+  rain.markComplete(3150);
+  rain.markComplete(3900); // Extra input cannot extend or bypass the pause.
   assert.equal(rain.advanceAt, lastLanding + 1000);
-  assert.equal(rain.nextWake(150), lastLanding);
+  assert.equal(rain.nextWake(3150), lastLanding);
   assert.ok(rain.state(lastLanding - 1).pending > 0);
   assert.deepEqual(rain.state(lastLanding), { pending: 0, completing: true, ready: false });
   assert.equal(rain.nextWake(lastLanding), lastLanding + 1000);
@@ -48,18 +50,57 @@ test('file completion waits for overlapping batches to land, then a full second'
   assert.equal(rain.nextWake(lastLanding + 1000), null);
 });
 
-test('deletions and reduced motion still get the completion pause', () => {
+test('tiny deletions, whitespace, and reduced motion stay visible for three seconds', () => {
   const rain = new RainTimeline(seededRandom());
   rain.add([{ offset: 0, text: 'plain text' }], 100, true);
   assert.equal(rain.drops.size, 0);
   rain.markComplete(100);
+  assert.equal(rain.state(3099).ready, false);
+  assert.equal(rain.state(3100).ready, true);
+  rain.clear();
+  rain.add([], 4000);
+  rain.markComplete(4000);
+  assert.equal(rain.state(6999).ready, false);
+  assert.equal(rain.state(7000).ready, true);
+  rain.clear();
+  rain.add([{ offset: 0, text: ' \n\t' }], 8000);
+  rain.markComplete(8000);
+  assert.equal(rain.state(10999).ready, false);
+  assert.equal(rain.state(11000).ready, true);
+});
+
+for (const length of [1, 5, 20, 49, 50]) {
+  test(`a ${length}-character file completed by one 50-character keypress stays visible`, () => {
+    const replay = new Replay({ parts: [{ type: 'add', text: 'x'.repeat(length) }], total: length });
+    const rain = new RainTimeline(seededRandom());
+    rain.add(replay.step(50).inserted, 100);
+    assert.equal(replay.done, true);
+    const landing = rain.lastLanding();
+    rain.markComplete(100);
+    const deadline = rain.advanceAt;
+    assert.ok(deadline >= 3100);
+    assert.ok(deadline >= landing + 1000);
+    assert.equal(rain.nextWake(100), landing);
+    assert.equal(rain.state(landing).pending, 0);
+    assert.equal(rain.nextWake(landing), deadline);
+    rain.markComplete(deadline - 1);
+    assert.equal(rain.advanceAt, deadline, 'extra keys do not change the deadline');
+    assert.equal(rain.state(deadline - 1).ready, false);
+    assert.equal(rain.state(deadline).ready, true);
+    // A following tiny file gets its own full viewing time.
+    rain.clear();
+    rain.add([{ offset: 0, text: 'y' }], deadline + 100);
+    rain.markComplete(deadline + 100);
+    assert.equal(rain.state(deadline + 3099).ready, false);
+    assert.equal(rain.state(deadline + 3100).ready, true);
+  });
+}
+
+test('explicitly skipping an untouched file keeps the usual one-second pause', () => {
+  const rain = new RainTimeline(seededRandom());
+  rain.markComplete(100);
   assert.equal(rain.state(1099).ready, false);
   assert.equal(rain.state(1100).ready, true);
-  rain.clear();
-  rain.add([], 2000);
-  rain.markComplete(2000);
-  assert.equal(rain.state(2999).ready, false);
-  assert.equal(rain.state(3000).ready, true);
 });
 
 test('reset cancels the previous deadline and reduced motion settles pending drops', () => {
@@ -73,5 +114,5 @@ test('reset cancels the previous deadline and reduced motion settles pending dro
   rain.markComplete(6000);
   rain.settle(6100);
   assert.equal(rain.drops.size, 0);
-  assert.equal(rain.advanceAt, 7100);
+  assert.equal(rain.advanceAt, 9000);
 });

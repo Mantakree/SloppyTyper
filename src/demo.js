@@ -7,6 +7,7 @@ export function demoSession() {
     'src/legacy-workflow.ts': `// This process has been lovingly retired.\nexport const workflow = 'actually type every character';\n`,
   };
   const after = {
+    'src/tiny.ts': `export const ready = true;\n`,
     'src/vibe-engine.ts': `import { Developer, Coffee, ArtificialConfidence } from './types';\n\n// The code is already written. The glory is still available.\nexport class VibeEngine {\n  private coffee = new Coffee({ bottomless: true });\n  private confidence = Infinity;\n\n  async ship(developer: Developer) {\n    const code = await developer.askNicely();\n    const tests = await developer.runTests(code);\n    const pride = new ArtificialConfidence();\n\n    if (tests.passed) {\n      await pride.claimCredit({ enthusiasm: 'unreasonable' });\n      return developer.deploy(code);\n    }\n\n    return this.coffee.refill();\n  }\n}\n`,
     'src/accomplishment.ts': `export function calculatePride(keysMashed: number) {\n  const effort = Math.max(1, keysMashed);\n  const completelyScientificMultiplier = 9001;\n\n  return effort * completelyScientificMultiplier;\n}\n`,
     'src/victory.ts': `export const victory = {\n  code: 'shipped',\n  keyboard: 'warm',\n  imposterSyndrome: false,\n  message: 'I made this. Technically.',\n};\n`,
