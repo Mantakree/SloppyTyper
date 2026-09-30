@@ -20,7 +20,7 @@ export async function launch(session, { open = true } = {}) {
   const file = path.join(dataDir(), `session-${session.id}.json`);
   await writeJSON(file, session);
   const child = fork(fileURLToPath(new URL('../bin/sloppytyper.js', import.meta.url)), ['serve-session', '--file', file], {
-    detached: true, windowsHide: true, stdio: ['ignore', 'ignore', 'ignore', 'ipc'],
+    detached: true, windowsHide: true, execArgv: [], stdio: ['ignore', 'ignore', 'ignore', 'ipc'],
   });
   const url = await new Promise((resolve, reject) => {
     const timer = setTimeout(() => { child.kill(); reject(new Error('Viewer did not start within 10 seconds.')); }, 10000);
