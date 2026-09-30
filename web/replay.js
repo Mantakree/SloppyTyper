@@ -18,17 +18,22 @@ export class Replay {
   }
   step(count = 1) {
     let remaining = Math.max(0, Math.floor(count));
+    const inserted = [];
     while (remaining > 0 && !this.done) {
       const part = this.parts[this.index];
       if (!part) { this.progress = this.total; break; } // Empty file creation/deletion.
       const take = Math.min(remaining, part.chars.length - this.offset);
-      if (part.type === 'add') this.prefix += part.chars.slice(this.offset, this.offset + take).join('');
+      if (part.type === 'add') {
+        const text = part.chars.slice(this.offset, this.offset + take).join('');
+        inserted.push({ offset: this.prefix.length, text });
+        this.prefix += text;
+      }
       this.offset += take;
       this.progress += take;
       remaining -= take;
       if (this.offset === part.chars.length) { this.index++; this.offset = 0; this.skipEqual(); }
     }
-    return this.view();
+    return { ...this.view(), inserted };
   }
   get done() { return this.progress >= this.total; }
   view() {

@@ -53,7 +53,7 @@ test('random edit sequences finish exactly at all speeds', () => {
     const after = Array.from({ length: random(80) }, () => alphabet[random(alphabet.length)]).join('');
     if (before === after) continue;
     const replay = new Replay(session({ 'a.js': before }, { 'a.js': after }).files[0]);
-    while (!replay.done) replay.step([1, 5, 20][random(3)]);
+    while (!replay.done) replay.step([1, 5, 20, 50][random(4)]);
     assert.equal(replay.view().text, after);
   }
 });
@@ -61,4 +61,23 @@ test('random edit sequences finish exactly at all speeds', () => {
 test('oversized or unsupported files are not mistaken for deletions', () => {
   const result = makeSession({ ...meta, files: { 'big.js': 'old' } }, { ...meta, files: {}, skipped: ['big.js'] });
   assert.deepEqual(result.files, []);
+});
+
+test('rain insertion offsets identify only new characters across edits and Unicode', () => {
+  const file = session({ 'a.js': 'const fox = "🦊";\nold();\n' }, { 'a.js': 'const fox = "🦄";\nnewThing();\nfinish();\n' }).files[0];
+  for (const speed of [1, 5, 20, 50]) {
+    const replay = new Replay(file);
+    let added = '';
+    while (!replay.done) {
+      const frame = replay.step(speed);
+      for (const insertion of frame.inserted) {
+        assert.equal(frame.text.slice(insertion.offset, insertion.offset + insertion.text.length), insertion.text);
+        added += insertion.text;
+      }
+    }
+    assert.equal(added, file.parts.filter(p => p.type === 'add').map(p => p.text).join(''));
+    assert.equal(replay.view().text, file.after);
+  }
+  const deletion = new Replay(session({ 'a.js': 'remove' }, {}).files[0]);
+  assert.deepEqual(deletion.step(50).inserted, []);
 });

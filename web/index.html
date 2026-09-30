@@ -14,41 +14,27 @@
   <div class="shell">
     <header class="masthead">
       <a class="brand" href="./" aria-label="SloppyTyper home"><span class="brand-mark">s<span>▌</span></span>sloppy<span>typer</span><small>v0.1</small></a>
-      <div class="local-status"><span class="status-dot"></span> LOCAL SESSION <span class="divider">/</span> <span>ZERO FILES WRITTEN</span></div>
-      <button id="focus" class="icon-button" title="Toggle focus mode (Escape to exit)">[ &nbsp; ] <span>Focus</span></button>
+      <div class="local-status"><span class="status-dot"></span> LOCAL SESSION</div>
     </header>
 
-    <section class="intro">
-      <div><div class="eyebrow"><span class="tiny-cross">+</span> THE POST-CODE RITUAL</div><h1>The AI did the work.<br>You get the <em>keystrokes.</em></h1><p>A little keyboard smashing. A lot of pride and accomplishment.</p></div>
-      <div class="session-card"><span class="muted-label">CURRENT SESSION</span><strong id="repo">Connecting…</strong><span id="branch" class="branch">⑂ main</span><span id="source" class="source-label">LOCAL REPLAY</span></div>
-    </section>
-
     <main class="workspace">
-      <aside class="sidebar">
-        <div class="sidebar-title">THE PATCH <span id="file-count">00 FILES</span></div>
-        <nav id="files" aria-label="Changed source files"></nav>
-        <div class="sidebar-bottom"><span class="outline-star">✳</span><strong>All the glory.<br>None of the consequences.</strong><p>You're replaying a copy.<br>Your real code is already safe.</p><span id="skipped" class="small-note"></span></div>
-      </aside>
-
       <section class="terminal" aria-label="Source code replay">
-        <div class="terminal-bar"><div class="terminal-dots" aria-hidden="true"><i></i><i></i><i></i></div><span id="file-name">Loading source</span><span id="file-kind" class="file-kind">MODIFIED</span></div>
-        <div class="code-meta"><span><span class="status-dot"></span> <span id="phase">AWAITING YOUR GENIUS</span></span><span id="file-progress">0 / 0 CHARACTERS</span></div>
-        <div id="code-scroll" class="code-scroll" tabindex="0" aria-label="Code preview. Press letter keys to replay changes."><pre id="code" aria-hidden="true"></pre><p id="empty-code" hidden>New file. A blank canvas for your borrowed brilliance.</p></div>
+        <div class="terminal-bar"><div class="terminal-dots" aria-hidden="true"><i></i><i></i><i></i></div><select id="files" aria-label="Source file"><option>Loading source</option></select><span id="file-kind" class="file-kind">MODIFIED</span></div>
+        <div class="code-meta"><span><span class="status-dot"></span> <span id="phase">READY</span></span><span id="file-progress">0 / 0 CHARACTERS</span><button id="skip">Skip file ↗</button></div>
+        <div id="code-scroll" class="code-scroll" tabindex="0" aria-label="Code preview. Press letter keys to replay changes."><pre id="code" aria-hidden="true"></pre><p id="empty-code" hidden>New file. Press any key to begin.</p></div>
         <div id="completion" class="completion" hidden>
-          <div class="completion-icon">✓</div><span class="eyebrow">PRIDE & ACCOMPLISHMENT UNLOCKED</span><h2>Look at you.<br>A developer.</h2><p>Every change, lovingly pretend-written by you.</p><div class="completion-stats"><span><strong id="end-keys">0</strong>KEYSTROKES</span><span><strong id="end-time">0s</strong>HARD WORK</span><span><strong>100%</strong>PLAUSIBLE CREDIT</span></div><button id="again" class="primary-button">↻ &nbsp; Experience accomplishment again</button>
+          <div class="completion-icon">✓</div><h2>Replay complete.</h2><div class="completion-stats"><span><strong id="end-keys">0</strong>KEYSTROKES</span><span><strong id="end-time">0s</strong>ELAPSED</span><span><strong id="end-files">0</strong>FILES</span></div><button id="again" class="primary-button">↻ &nbsp; Replay again</button>
         </div>
-        <div class="terminal-footer"><span id="operation">READY WHEN YOU ARE<span class="blinking-block">▌</span></span><button id="skip">Skip file ↗</button></div>
       </section>
     </main>
 
     <section class="control-deck" aria-label="Replay controls">
-      <button id="mash" class="mash-button"><span class="keycap">⌨</span><span><strong id="mash-title">MASH ANY KEY</strong><small id="mash-description">Go on. You definitely wrote this.</small></span><span class="mash-arrow">↵</span></button>
-      <div class="speed-control"><span class="muted-label">CHARS / KEY</span><div role="group" aria-label="Characters per keystroke"><button data-speed="1" aria-pressed="true">1</button><button data-speed="5" aria-pressed="false">5</button><button data-speed="20" aria-pressed="false">20</button></div></div>
+      <button id="mash" class="mash-button"><span class="keycap">⌨</span><strong id="mash-title">MASH ANY KEY</strong><span class="mash-arrow">↵</span></button>
+      <div class="speed-control"><span class="muted-label">CHARS / KEY</span><div role="group" aria-label="Characters per keystroke"><button data-speed="1" aria-pressed="true">1</button><button data-speed="5" aria-pressed="false">5</button><button data-speed="20" aria-pressed="false">20</button><button data-speed="50" aria-pressed="false">50</button></div></div>
       <div class="extra-controls"><button id="sound" aria-pressed="false" title="Toggle synthesized keyboard sound">♪ <span>Sound off</span></button><button id="reset" title="Restart all files">↺ <span>Restart</span></button></div>
     </section>
 
-    <section class="progress-section" aria-label="Overall replay progress"><div class="progress-copy"><span><strong id="percent">0%</strong> <span>OF THE GLORY CLAIMED</span></span><span><b id="keys">0</b> KEYSTROKES <span class="divider">/</span> <b id="completed-files">0 / 0</b> FILES</span></div><progress id="progress" value="0" max="100" aria-label="Changes replayed">0%</progress></section>
-    <footer class="page-footer"><span>REAL CODE. SYNTHETIC EFFORT.</span><span>NO SAVES. NO COMMITS. JUST VIBES. <span class="tiny-cross">+</span></span></footer>
+    <section class="progress-section" aria-label="Overall replay progress"><div class="progress-copy"><span><strong id="percent">0%</strong> <span>REPLAYED</span><span id="skipped"></span></span><span><b id="keys">0</b> KEYSTROKES <span class="divider">/</span> <b id="completed-files">0 / 0</b> FILES</span></div><progress id="progress" value="0" max="100" aria-label="Changes replayed">0%</progress></section>
     <div id="announcement" class="sr-only" aria-live="polite"></div>
     <div id="error" class="error" role="alert" hidden></div>
   </div>

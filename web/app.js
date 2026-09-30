@@ -1,8 +1,12 @@
 import { Replay } from './replay.js';
 
 const $ = id => document.getElementById(id);
-let session, replays, current = 0, keystrokes = 0, speed = 1, started = 0, sound = false, audio;
+let session, replays, current = 0, keystrokes = 0, speed = 1, started = 0, finished = 0, sound = false, audio;
 let rendering = false, followCursor = false;
+const rain = new Map();
+const reducedMotion = matchMedia('(prefers-reduced-motion: reduce)');
+const rainGlyphs = [...'アイウエオカキクケコサシスセソタチツテトナニヌネノ012345789'];
+let rainCleanup;
 const number = n => n.toLocaleString();
 const keywords = /^(?:import|from|export|class|private|public|async|await|const|let|var|if|else|return|new|function|def|self|for|while|try|catch|throw|interface|type|true|false|null|undefined|None|True|False|fn|pub|use|impl|struct|match|package|func)$/;
 
@@ -22,7 +26,50 @@ function highlighted(text) {
   return fragment;
 }
 
-function renderCode() {
+function clearRain() {
+  rain.clear();
+  clearTimeout(rainCleanup);
+}
+
+function addRain(inserted) {
+  if (reducedMotion.matches) return;
+  const now = performance.now();
+  for (const insertion of inserted) {
+    let offset = insertion.offset;
+    for (const char of insertion.text) {
+      if (!/\s/u.test(char)) rain.set(offset, {
+        char, start: now, duration: 460 + Math.random() * 180,
+        trail: Array.from({ length: 5 }, () => rainGlyphs[Math.floor(Math.random() * rainGlyphs.length)]).join('\n'),
+      });
+      offset += char.length;
+    }
+  }
+  // Keep rapid mashing bounded, and settle the final characters before celebrating.
+  while (rain.size > 400) rain.delete(rain.keys().next().value);
+  clearTimeout(rainCleanup);
+  rainCleanup = setTimeout(scheduleRender, 660);
+}
+
+function appendSource(parent, text, offset, falling, now) {
+  let start = 0;
+  for (const [position, drop] of falling) {
+    const index = position - offset;
+    if (index < 0 || index >= text.length) continue;
+    parent.append(highlighted(text.slice(start, index)));
+    const char = document.createElement('span');
+    char.className = 'rain-char';
+    char.textContent = drop.char;
+    char.dataset.trail = drop.trail;
+    // A negative delay preserves each drop's position across rapid re-renders.
+    char.style.setProperty('--rain-duration', `${drop.duration}ms`);
+    char.style.setProperty('--rain-delay', `${-(now - drop.start)}ms`);
+    parent.append(char);
+    start = index + drop.char.length;
+  }
+  parent.append(highlighted(text.slice(start)));
+}
+
+function renderCode(now) {
   const replay = replays[current];
   const { text, cursor } = replay.view();
   const allLines = text.split('\n');
@@ -31,6 +78,7 @@ function renderCode() {
   const start = allLines.length > 1000 ? Math.max(0, cursorLine - 80) : 0;
   const end = allLines.length > 1000 ? Math.min(allLines.length, cursorLine + 170) : allLines.length;
   const fragment = document.createDocumentFragment();
+  const falling = [...rain].sort((a, b) => a[0] - b[0]);
   let position = allLines.slice(0, start).reduce((sum, line) => sum + line.length + 1, 0);
   let active;
   for (let i = start; i < end; i++) {
@@ -39,61 +87,62 @@ function renderCode() {
     row.className = 'code-line';
     const lineNumber = document.createElement('span');
     lineNumber.className = 'line-number'; lineNumber.textContent = i + 1;
-    row.append(lineNumber);
+    const content = document.createElement('span');
+    content.className = 'line-content';
+    row.append(lineNumber, content);
     if (i === cursorLine && !replay.done) {
-      row.classList.add('active-line'); active = row;
+      row.classList.add('active-line');
       const col = cursor - position;
-      row.append(highlighted(line.slice(0, col)));
-      const caret = document.createElement('span'); caret.className = 'caret'; row.append(caret);
-      row.append(highlighted(line.slice(col)));
-    } else row.append(highlighted(line || ' '));
+      appendSource(content, line.slice(0, col), position, falling, now);
+      const caret = document.createElement('span'); caret.className = 'caret'; content.append(caret); active = caret;
+      appendSource(content, line.slice(col), position + col, falling, now);
+    } else appendSource(content, line, position, falling, now);
     fragment.append(row);
     position += line.length + 1;
   }
   $('code').replaceChildren(fragment);
   $('empty-code').hidden = text.length !== 0;
-  $('empty-code').textContent = replay.done && replay.file.kind === 'deleted' ? 'File deleted. Very productive of you.' : 'New file. A blank canvas for your borrowed brilliance.';
+  $('empty-code').textContent = replay.done && replay.file.kind === 'deleted' ? 'File deleted.' : 'New file. Press any key to begin.';
   if (followCursor && active) {
     const viewport = $('code-scroll');
-    const top = active.offsetTop - $('code').offsetTop;
-    if (top < viewport.scrollTop + 25 || top > viewport.scrollTop + viewport.clientHeight - 50) viewport.scrollTop = Math.max(0, top - viewport.clientHeight / 3);
+    const top = active.getBoundingClientRect().top - viewport.getBoundingClientRect().top;
+    if (top < 25 || top > viewport.clientHeight - 50) viewport.scrollTop += top - viewport.clientHeight / 3;
   }
   followCursor = false;
 }
 
 function render() {
   rendering = false;
+  const now = performance.now();
+  for (const [position, drop] of rain) if (now - drop.start >= drop.duration || reducedMotion.matches) rain.delete(position);
   const replay = replays[current];
   const progress = replays.reduce((n, r) => n + r.progress, 0);
   const doneCount = replays.filter(r => r.done).length;
   const complete = doneCount === replays.length;
   const percent = Math.floor(progress / session.total * 100);
-  $('file-name').textContent = replay.file.path;
+  $('files').value = String(current);
   $('file-kind').textContent = replay.file.kind.toUpperCase();
   $('file-progress').textContent = `${number(replay.progress)} / ${number(replay.total)} CHARACTERS`;
-  $('phase').textContent = complete ? 'ACCOMPLISHMENT UNLOCKED' : replay.done ? 'FILE COMPLETE' : keystrokes ? 'HIGHLY SKILLED TYPING IN PROGRESS' : 'AWAITING YOUR GENIUS';
-  $('operation').textContent = replay.done ? 'LOOKS LIKE YOU WROTE IT' : !keystrokes ? 'READY WHEN YOU ARE ▌' : replay.view().operation === 'remove' ? 'REMOVING CODE. STILL COUNTS AS WORK.' : 'GENERATING PLAUSIBLE DENIABILITY ▌';
+  $('phase').textContent = complete ? 'COMPLETE' : replay.done ? 'FILE COMPLETE' : keystrokes ? 'REPLAYING' : 'READY';
   $('percent').textContent = `${percent}%`;
   $('progress').value = percent;
   $('keys').textContent = number(keystrokes);
   $('completed-files').textContent = `${doneCount} / ${replays.length}`;
   $('skip').disabled = replay.done;
-  for (const [i, button] of [...$('files').children].entries()) {
-    button.classList.toggle('active', i === current);
-    button.classList.toggle('done', replays[i].done);
-    button.setAttribute('aria-current', i === current ? 'true' : 'false');
-    button.lastChild.textContent = replays[i].done ? '✓' : ({ added: 'A', deleted: 'D', modified: 'M' })[replays[i].file.kind];
+  for (const [i, option] of [...$('files').options].entries()) {
+    option.textContent = `${replays[i].done ? '✓ ' : ''}${replays[i].file.path}`;
   }
-  $('completion').hidden = !complete;
-  $('mash-title').textContent = complete ? 'GLORY SUCCESSFULLY CLAIMED' : 'MASH ANY KEY';
-  $('mash-description').textContent = complete ? 'Your keyboard has earned a break.' : 'Go on. You definitely wrote this.';
+  $('completion').hidden = !complete || rain.size > 0;
+  $('mash-title').textContent = complete ? 'REPLAY COMPLETE' : 'MASH ANY KEY';
   $('mash').disabled = complete;
   if (complete) {
+    finished ||= Date.now();
     $('end-keys').textContent = number(keystrokes);
-    $('end-time').textContent = `${started ? Math.max(1, Math.round((Date.now() - started) / 1000)) : 0}s`;
-    $('announcement').textContent = 'Replay complete. Pride and accomplishment unlocked. No files were changed.';
+    $('end-time').textContent = `${started ? Math.max(1, Math.round((finished - started) / 1000)) : 0}s`;
+    $('end-files').textContent = replays.length;
+    $('announcement').textContent = 'Replay complete.';
   }
-  renderCode();
+  renderCode(now);
 }
 
 function scheduleRender() { if (!rendering) { rendering = true; requestAnimationFrame(render); } }
@@ -113,16 +162,17 @@ function blip() {
 function mash() {
   if (!replays || replays.every(r => r.done)) return;
   started ||= Date.now();
-  if (replays[current].done) current = replays.findIndex(r => !r.done);
+  if (replays[current].done) { clearRain(); current = replays.findIndex(r => !r.done); }
   keystrokes++;
-  replays[current].step(speed);
+  addRain(replays[current].step(speed).inserted);
   followCursor = true;
   blip(); scheduleRender();
 }
 function reset() {
   if (!session) return;
   replays = session.files.map(file => new Replay(file));
-  current = 0; keystrokes = 0; started = 0;
+  current = 0; keystrokes = 0; started = 0; finished = 0;
+  clearRain();
   $('announcement').textContent = 'Replay restarted.';
   $('code-scroll').scrollTop = 0;
   render();
@@ -131,13 +181,17 @@ function reset() {
 $('mash').addEventListener('click', mash);
 $('skip').addEventListener('click', () => {
   if (!replays) return;
+  clearRain();
   replays[current].step(replays[current].total);
   if (!replays.every(r => r.done)) current = replays.findIndex(r => !r.done);
   followCursor = true; render();
 });
 $('reset').addEventListener('click', reset);
 $('again').addEventListener('click', () => { reset(); $('code-scroll').focus(); });
-$('focus').addEventListener('click', () => document.body.classList.toggle('focus-mode'));
+$('files').addEventListener('change', () => {
+  clearRain(); current = Number($('files').value); followCursor = true;
+  render(); $('code-scroll').focus();
+});
 $('sound').addEventListener('click', () => {
   sound = !sound; $('sound').setAttribute('aria-pressed', String(sound));
   $('sound').lastElementChild.textContent = sound ? 'Sound on' : 'Sound off'; blip();
@@ -148,7 +202,6 @@ document.querySelectorAll('[data-speed]').forEach(button => button.addEventListe
   button.blur();
 }));
 window.addEventListener('keydown', event => {
-  if (event.key === 'Escape') { document.body.classList.remove('focus-mode'); return; }
   if (event.ctrlKey || event.metaKey || event.altKey || event.isComposing) return;
   if (event.target.closest('input,select,textarea,[contenteditable="true"]')) return;
   if (event.target.closest('button,a') && ['Enter', ' '].includes(event.key)) return;
@@ -162,23 +215,15 @@ try {
   session = await response.json();
   if (!session.files?.length) throw new Error('Nothing to replay. Your source files have not changed.');
   document.title = `${session.repo} / SloppyTyper`;
-  $('repo').textContent = session.repo;
-  $('branch').textContent = `⑂ ${session.branch}`;
-  $('source').textContent = session.source === 'demo' ? 'DEMO SESSION' : `${session.source.toUpperCase()} SESSION`;
-  $('file-count').textContent = `${String(session.files.length).padStart(2, '0')} FILES`;
   if (session.skipped.length) $('skipped').textContent = `${session.skipped.length} unsupported file(s) skipped`;
+  $('files').replaceChildren();
   session.files.forEach((file, i) => {
-    const button = document.createElement('button'); button.className = 'file-button'; button.title = file.path;
-    const icon = document.createElement('span'); icon.className = 'file-icon'; icon.textContent = '⌘';
-    const label = document.createElement('span'); label.className = 'file-label'; label.textContent = file.path.split('/').pop();
-    const badge = document.createElement('span'); badge.className = 'file-badge';
-    button.append(icon, label, badge); button.setAttribute('aria-label', file.path);
-    button.addEventListener('click', () => { current = i; followCursor = true; render(); $('code-scroll').focus(); });
-    $('files').append(button);
+    const option = document.createElement('option'); option.value = i; option.textContent = file.path;
+    $('files').append(option);
   });
   reset();
 } catch (error) {
   $('error').hidden = false; $('error').textContent = error.message;
-  $('repo').textContent = 'Session unavailable'; $('mash').disabled = true;
+  $('mash').disabled = true;
   $('phase').textContent = 'CONNECTION LOST';
 }
