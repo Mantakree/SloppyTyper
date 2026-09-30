@@ -14,7 +14,7 @@
     "start": "node bin/sloppytyper.js demo",
     "demo": "node bin/sloppytyper.js demo",
     "test": "node --test",
-    "check": "node --check bin/sloppytyper.js && node --check web/app.js && node --check web/code-view.js"
+    "check": "node --check bin/sloppytyper.js && node --check web/app.js && node --check web/code-view.js && node --check web/effects.js"
   },
   "dependencies": {
     "diff": "^8.0.2"

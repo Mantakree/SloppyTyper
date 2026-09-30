@@ -109,6 +109,7 @@ test('viewer serves only immutable session and bundled assets on tokenized loopb
   assert.equal((await fetch(`${url}../../package.json`)).status, 404);
   assert.equal((await fetch(`${url}app.js`)).status, 200);
   assert.equal((await fetch(`${url}code-view.js`)).status, 200);
+  assert.equal((await fetch(`${url}effects.js`)).status, 200);
   assert.deepEqual(await (await fetch(`${url}session.json`)).json(), session);
 });
 

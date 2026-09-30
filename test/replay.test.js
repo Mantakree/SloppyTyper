@@ -53,7 +53,11 @@ test('random edit sequences finish exactly at all speeds', () => {
     const after = Array.from({ length: random(80) }, () => alphabet[random(alphabet.length)]).join('');
     if (before === after) continue;
     const replay = new Replay(session({ 'a.js': before }, { 'a.js': after }).files[0]);
-    while (!replay.done) replay.step([1, 5, 20, 50][random(4)]);
+    while (!replay.done) {
+      const beforeStep = replay.view().text;
+      const frame = replay.step([1, 5, 10, 20, 50][random(5)]);
+      for (const removed of frame.removed) assert.equal(beforeStep.slice(removed.offset, removed.offset + removed.text.length), removed.text);
+    }
     assert.equal(replay.view().text, after);
   }
 });
@@ -65,7 +69,7 @@ test('oversized or unsupported files are not mistaken for deletions', () => {
 
 test('rain insertion offsets identify only new characters across edits and Unicode', () => {
   const file = session({ 'a.js': 'const fox = "🦊";\nold();\n' }, { 'a.js': 'const fox = "🦄";\nnewThing();\nfinish();\n' }).files[0];
-  for (const speed of [1, 5, 20, 50]) {
+  for (const speed of [1, 5, 10, 20, 50]) {
     const replay = new Replay(file);
     let added = '';
     while (!replay.done) {
@@ -80,4 +84,13 @@ test('rain insertion offsets identify only new characters across edits and Unico
   }
   const deletion = new Replay(session({ 'a.js': 'remove' }, {}).files[0]);
   assert.deepEqual(deletion.step(50).inserted, []);
+});
+
+test('added ranges keep only written characters bright after mixed Unicode edits', () => {
+  const file = session({ 'a.js': 'old 🦊\nkeep\nlast' }, { 'a.js': 'new 🦄\nkeep\nend' }).files[0];
+  const replay = new Replay(file);
+  while (!replay.done) replay.step(10);
+  const added = replay.added.map(({ start, end }) => file.after.slice(start, end)).join('');
+  assert.equal(added, file.parts.filter(p => p.type === 'add').map(p => p.text).join(''));
+  assert.ok(replay.added.every((range, i) => range.end > range.start && (!i || range.start > replay.added[i - 1].end)));
 });

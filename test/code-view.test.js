@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { parseHTML } from 'linkedom';
-import { CodeView } from '../web/code-view.js';
+import { CodeView, charactersIn } from '../web/code-view.js';
 import { Replay } from '../web/replay.js';
 import { RainTimeline } from '../web/rain.js';
 
@@ -18,30 +18,23 @@ function setup(parts) {
   return { document, MutationObserver, code, view, replay, rain, text, render, step };
 }
 
-for (const speed of [20, 50]) {
-  test(`${speed}-character bursts retain existing rain animations without detaching nodes`, () => {
+for (const speed of [10, 20, 50]) {
+  test(`${speed}-character bursts render source in runs without per-character animated elements`, () => {
     const state = setup([{ type: 'add', text: 'const answer = "🦊<script>literal</script>";\n'.repeat(12) }]);
-    const { code, step, text, replay, render, rain, MutationObserver } = state;
+    const { code, step, text, replay, render, rain } = state;
     step(speed, 0);
-    const drops = [...code.querySelectorAll('.rain-char')];
-    const styles = drops.map(node => node.getAttribute('style'));
-    const observer = new MutationObserver(() => {});
-    observer.observe(code, { childList: true, subtree: true });
     for (let i = 1; i <= 5; i++) {
       step(speed, i * 30);
       assert.equal(text(), replay.view().text);
     }
-    const removals = observer.takeRecords().flatMap(record => [...record.removedNodes]);
-    for (const [i, drop] of drops.entries()) {
-      assert.ok(code.contains(drop), 'existing drop stays in the document');
-      assert.equal(drop.getAttribute('style'), styles[i], 'its animation clock is not rewritten');
-      assert.ok(!removals.some(node => node === drop || node.contains(drop)), 'its animated subtree is never detached');
-    }
+    assert.equal(code.querySelectorAll('.rain-char').length, 0);
+    assert.ok(code.querySelectorAll('.rain-pending').length < rain.drops.size / 2, 'pending characters share spans');
+    assert.equal(code.querySelector('[style]'), null, 'the source has no per-character animation styles');
     assert.equal(code.querySelector('script'), null, 'source remains text');
     render(rain.lastLanding() + 1);
-    assert.equal(code.querySelectorAll('.rain-char').length, 0);
+    assert.equal(code.querySelectorAll('.rain-pending').length, 0);
+    assert.equal([...code.querySelectorAll('.code-added')].map(node => node.textContent).join(''), text().replaceAll('\n', ''));
     assert.equal(text(), replay.view().text);
-    observer.disconnect();
   });
 }
 
@@ -59,7 +52,7 @@ test('edits near the top of a long file retain the unchanged suffix and only all
   assert.equal(state.code.lastChild, oldRows.at(-1));
   assert.equal(state.code.lastChild.querySelector('.syntax-keyword'), oldSyntax);
   assert.equal(state.code.lastChild.firstChild.textContent, '802');
-  assert.ok(allocated < 80, `only the changed line and its 49 drops allocate elements (got ${allocated})`);
+  assert.ok(allocated < 12, `only changed rows and whole runs allocate elements (got ${allocated})`);
   allocated = 0;
   state.render(20);
   assert.equal(allocated, 0, 'an unchanged frame allocates no elements');
@@ -89,18 +82,28 @@ test('large-file windows, reset, and switching files discard stale rows and drop
   assert.equal(state.code.lastChild.firstChild.textContent, '1101');
   assert.equal(state.code.querySelectorAll('.caret').length, 1);
   const retained = [...state.code.children].slice(10, -1);
-  const animations = retained.map(row => row.querySelector('.rain-char'));
+  const animations = retained.map(row => row.querySelector('.rain-pending'));
   state.step(20, 50);
   for (const [i, row] of retained.entries()) {
     assert.ok(state.code.contains(row), 'overlapping window rows stay attached');
-    assert.equal(row.querySelector('.rain-char'), animations[i], 'window scrolling keeps rain in the same row');
+    assert.equal(row.querySelector('.rain-pending'), animations[i], 'window scrolling keeps unchanged source in the same row');
   }
   const next = new Replay({ parts: [{ type: 'add', text: 'fresh' }], total: 5 });
   state.view.render(next, new Map(), 100);
   assert.equal(state.text(), '');
-  assert.equal(state.code.querySelectorAll('.rain-char').length, 0);
+  assert.equal(state.code.querySelectorAll('.rain-pending').length, 0);
   next.step(5);
   state.view.render(next, new Map(), 200);
   assert.equal(state.text(), 'fresh');
   assert.equal(state.code.querySelectorAll('.caret').length, 0);
+});
+
+test('written code stays highlighted and untouched source keeps its original styling', () => {
+  const state = setup([{ type: 'equal', text: 'const value = ' }, { type: 'remove', text: '0' }, { type: 'add', text: '123' }, { type: 'equal', text: '; // unchanged' }]);
+  state.step(10, 0);
+  state.render(5000);
+  assert.equal(state.code.querySelector('.code-added').textContent, '123');
+  assert.equal(state.code.querySelector('.syntax-comment').textContent, '// unchanged');
+  assert.equal(state.text(), 'const value = 123; // unchanged');
+  assert.deepEqual(charactersIn([{ offset: 3, text: ' 🦊\nA' }]), [{ offset: 4, char: '🦊' }, { offset: 7, char: 'A' }]);
 });

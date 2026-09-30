@@ -1,18 +1,23 @@
 import { Replay } from './replay.js';
 import { RainTimeline } from './rain.js';
-import { CodeView } from './code-view.js';
+import { CodeView, charactersIn } from './code-view.js';
+import { CodeEffects } from './effects.js';
 
 const $ = id => document.getElementById(id);
 let session, replays, current = 0, keystrokes = 0, speed = 1, started = 0, finished = 0, sound = false, audio;
 let rendering = false, followCursor = false;
+let queuedCharacters = 0;
 const rain = new RainTimeline();
 const reducedMotion = matchMedia('(prefers-reduced-motion: reduce)');
 let rainCleanup;
 const number = n => n.toLocaleString();
 const codeView = new CodeView($('code'));
+const effects = new CodeEffects($('code-effects'), $('code-scroll'), $('code'), rain, () => { if (replays) scheduleRender(); });
 
 function clearRain() {
   rain.clear();
+  effects.clear();
+  queuedCharacters = 0;
   clearTimeout(rainCleanup);
 }
 
@@ -33,12 +38,26 @@ function renderCode(now) {
     if (top < 25 || top > viewport.clientHeight - 50) viewport.scrollTop += top - viewport.clientHeight / 3;
   }
   followCursor = false;
+  effects.sync(codeView);
 }
 
 function render() {
   rendering = false;
   const now = performance.now();
   let rainState = rain.state(now);
+  if (queuedCharacters) {
+    const replay = replays[current];
+    const change = replay.step(queuedCharacters);
+    queuedCharacters = 0;
+    const motionOff = reducedMotion.matches || !effects.ctx;
+    // Read old glyph positions before any DOM writes. Multiple key events in
+    // one frame become one edit and one layout pass, including mixed edits.
+    const removed = motionOff ? [] : [...codeView.positions(charactersIn(change.removed), $('code-scroll')).values()];
+    rain.add(change.inserted, now, motionOff);
+    rain.remove(removed, now, motionOff);
+    if (replay.done) rain.markComplete(now);
+    rainState = rain.state(now);
+  }
   if (rainState.ready && replays.some(r => !r.done)) {
     current = replays.findIndex(r => !r.done);
     clearRain();
@@ -63,7 +82,8 @@ function render() {
   $('skip').disabled = replay.done;
   $('files').disabled = rainState.pending > 0 || holding;
   for (const [i, option] of [...$('files').options].entries()) {
-    option.textContent = `${replays[i].done ? '✓ ' : ''}${replays[i].file.path}`;
+    const label = `${replays[i].done ? '✓ ' : ''}${replays[i].file.path}`;
+    if (option.textContent !== label) option.textContent = label;
   }
   $('completion').hidden = !complete || !rainState.ready;
   $('mash-title').textContent = holding ? (rainState.pending ? 'SETTLING' : 'FILE COMPLETE') : complete ? 'REPLAY COMPLETE' : 'MASH ANY KEY';
@@ -95,17 +115,16 @@ function blip() {
 }
 function mash() {
   if (!replays || replays.every(r => r.done)) return;
-  const now = performance.now();
-  const rainState = rain.state(now);
-  if (rainState.completing) return;
-  // Apply backpressure during extreme key repeat instead of making in-flight
-  // characters appear instantly to enforce an animation-count limit.
-  if (rainState.pending > 1500) return;
+  if (rain.advanceAt !== null) return;
   started ||= Date.now();
-  if (replays[current].done) { clearRain(); current = replays.findIndex(r => !r.done); }
+  if (replays[current].done) {
+    clearRain(); current = replays.findIndex(r => !r.done);
+    // A manually revisited completed file can resume another file. Establish
+    // its original layout before measuring that first batch of deletions.
+    $('code-scroll').scrollTop = 0; render();
+  }
   keystrokes++;
-  rain.add(replays[current].step(speed).inserted, now, reducedMotion.matches);
-  if (replays[current].done) rain.markComplete(now);
+  queuedCharacters += speed;
   followCursor = true;
   blip(); scheduleRender();
 }
@@ -122,6 +141,7 @@ function reset() {
 $('mash').addEventListener('click', mash);
 $('skip').addEventListener('click', () => {
   if (!replays || replays[current].done) return;
+  queuedCharacters = 0;
   replays[current].step(replays[current].total);
   rain.markComplete(performance.now());
   followCursor = true; render();
@@ -130,7 +150,7 @@ $('reset').addEventListener('click', reset);
 $('again').addEventListener('click', () => { reset(); $('code-scroll').focus(); });
 $('files').addEventListener('change', () => {
   const state = rain.state(performance.now());
-  if (state.pending || (state.completing && !state.ready)) { $('files').value = String(current); return; }
+  if (queuedCharacters || state.pending || (state.completing && !state.ready)) { $('files').value = String(current); return; }
   clearRain(); current = Number($('files').value); followCursor = true;
   if (replays.every(r => r.done)) rain.advanceAt = performance.now();
   render(); $('code-scroll').focus();

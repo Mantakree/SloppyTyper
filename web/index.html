@@ -21,7 +21,7 @@
       <section class="terminal" aria-label="Source code replay">
         <div class="terminal-bar"><div class="terminal-dots" aria-hidden="true"><i></i><i></i><i></i></div><select id="files" aria-label="Source file"><option>Loading source</option></select><span id="file-kind" class="file-kind">MODIFIED</span></div>
         <div class="code-meta"><span><span class="status-dot"></span> <span id="phase">READY</span></span><span id="file-progress">0 / 0 CHARACTERS</span><button id="skip">Skip file ↗</button></div>
-        <div id="code-scroll" class="code-scroll" tabindex="0" aria-label="Code preview. Press letter keys to replay changes."><pre id="code" aria-hidden="true"></pre><p id="empty-code" hidden>New file. Press any key to begin.</p></div>
+        <div class="code-stage"><div id="code-scroll" class="code-scroll" tabindex="0" aria-label="Code preview. Press letter keys to replay changes."><pre id="code" aria-hidden="true"></pre><p id="empty-code" hidden>New file. Press any key to begin.</p></div><canvas id="code-effects" aria-hidden="true"></canvas></div>
         <div id="completion" class="completion" hidden>
           <div class="completion-icon">✓</div><h2>Replay complete.</h2><div class="completion-stats"><span><strong id="end-keys">0</strong>KEYSTROKES</span><span><strong id="end-time">0s</strong>ELAPSED</span><span><strong id="end-files">0</strong>FILES</span></div><button id="again" class="primary-button">↻ &nbsp; Replay again</button>
         </div>
@@ -30,7 +30,7 @@
 
     <section class="control-deck" aria-label="Replay controls">
       <button id="mash" class="mash-button"><span class="keycap">⌨</span><strong id="mash-title">MASH ANY KEY</strong><span class="mash-arrow">↵</span></button>
-      <div class="speed-control"><span class="muted-label">CHARS / KEY</span><div role="group" aria-label="Characters per keystroke"><button data-speed="1" aria-pressed="true">1</button><button data-speed="5" aria-pressed="false">5</button><button data-speed="20" aria-pressed="false">20</button><button data-speed="50" aria-pressed="false">50</button></div></div>
+      <div class="speed-control"><span class="muted-label">CHARS / KEY</span><div role="group" aria-label="Characters per keystroke"><button data-speed="1" aria-pressed="true">1</button><button data-speed="5" aria-pressed="false">5</button><button data-speed="10" aria-pressed="false">10</button><button data-speed="20" aria-pressed="false">20</button><button data-speed="50" aria-pressed="false">50</button></div></div>
       <div class="extra-controls"><button id="sound" aria-pressed="false" title="Toggle synthesized keyboard sound">♪ <span>Sound off</span></button><button id="reset" title="Restart all files">↺ <span>Restart</span></button></div>
     </section>
 

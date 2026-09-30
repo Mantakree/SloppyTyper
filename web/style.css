@@ -233,6 +233,20 @@ a {
   color: var(--muted);
   padding: 5px 0;
 }
+.code-stage {
+  position: relative;
+  display: flex;
+  flex: 1;
+  min-height: 0;
+  overflow: hidden;
+}
+#code-effects {
+  position: absolute;
+  top: 0;
+  left: 0;
+  pointer-events: none;
+  z-index: 1;
+}
 .code-scroll {
   overflow-y: auto;
   overflow-x: hidden;
@@ -306,49 +320,14 @@ pre {
   position: relative;
   animation: blink 1s step-end infinite;
 }
-.rain-char {
-  position: relative;
-  display: inline-block;
-  white-space: pre;
-  animation: rain-in var(--rain-duration) cubic-bezier(0.25, 0.05, 0.65, 1)
-    var(--rain-delay) both;
+.code-added {
+  color: #72ff93;
+  text-shadow: 0 0 5px #38ff7275, 0 0 11px #38ff7225;
 }
-.rain-char::before {
-  content: attr(data-trail);
-  pointer-events: none;
-  position: absolute;
-  bottom: 100%;
-  left: 0;
-  white-space: pre;
-  line-height: 1.1;
-  font-size: 0.85em;
-  font-style: normal;
-  color: #58ed83;
-  text-shadow: 0 0 8px #56ff89;
-  mask-image: linear-gradient(transparent, #000);
-  animation: rain-trail var(--rain-duration) linear var(--rain-delay) both;
-}
-@keyframes rain-in {
-  0% {
-    transform: translateY(calc(-1 * var(--rain-height, 160px)));
-    opacity: 0;
-  }
-  15% {
-    opacity: 1;
-  }
-  100% {
-    transform: translateY(0);
-    opacity: 1;
-  }
-}
-@keyframes rain-trail {
-  0%,
-  60% {
-    opacity: 0.7;
-  }
-  100% {
-    opacity: 0;
-  }
+.rain-pending {
+  visibility: hidden;
+  color: transparent;
+  text-shadow: none;
 }
 #empty-code {
   font-size: 12px;
@@ -672,7 +651,7 @@ progress::-moz-progress-bar {
     scroll-behavior: auto !important;
   }
   .scanlines,
-  .rain-char::before {
+  #code-effects {
     display: none;
   }
 }

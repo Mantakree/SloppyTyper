@@ -8,7 +8,7 @@ function seededRandom() {
   return () => { seed = (Math.imul(seed, 1664525) + 1013904223) >>> 0; return seed / 2 ** 32; };
 }
 
-for (const count of [5, 20, 50]) {
+for (const count of [5, 10, 20, 50]) {
   test(`${count}-character batches fall at distinct times in shuffled source order`, () => {
     const rain = new RainTimeline(seededRandom());
     rain.add([{ offset: 0, text: 'x'.repeat(count) }], 100);
@@ -115,4 +115,27 @@ test('reset cancels the previous deadline and reduced motion settles pending dro
   rain.settle(6100);
   assert.equal(rain.drops.size, 0);
   assert.equal(rain.advanceAt, 9000);
+});
+
+test('red deletion particles count toward completion and are cleared by reset and reduced motion', () => {
+  const rain = new RainTimeline(seededRandom());
+  rain.add([], 0);
+  rain.remove([{ char: 'x', x: 20, y: 50 }, { char: '🦊', x: 30, y: 50 }], 4000);
+  const ending = rain.lastLanding();
+  rain.markComplete(4000);
+  assert.equal(rain.burns.size, 2);
+  assert.equal(rain.state(4000).pending, 2);
+  assert.equal(rain.advanceAt, ending + 1000);
+  assert.equal(rain.state(ending).pending, 0);
+  assert.equal(rain.state(ending + 999).ready, false);
+  assert.equal(rain.state(ending + 1000).ready, true);
+  rain.clear();
+  rain.remove([{ char: 'x', x: 20, y: 50 }], 5000, true);
+  assert.equal(rain.burns.size, 0);
+  rain.remove([{ char: 'x', x: 20, y: 50 }], 6000);
+  rain.settle(6050);
+  assert.equal(rain.burns.size, 0);
+  rain.remove([{ char: 'x', x: 20, y: 50 }], 7000);
+  rain.clear();
+  assert.equal(rain.state(7100).pending, 0);
 });

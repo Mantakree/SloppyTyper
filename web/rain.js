@@ -1,6 +1,7 @@
 const glyphs = [...'アイウエオカキクケコサシスセソタチツテトナニヌネノ012345789'];
 const completionPause = 1000;
 const minimumFileDuration = 3000;
+const trails = Array.from({ length: 16 }, (_, i) => Array.from({ length: 5 }, (_, j) => glyphs[(i * 7 + j * 11) % glyphs.length]).join('\n'));
 
 // Animation time is independent of replay progress: writing the last character
 // doesn't mean that the visible characters have finished landing.
@@ -8,6 +9,7 @@ export class RainTimeline {
   constructor(random = Math.random) {
     this.random = random;
     this.drops = new Map();
+    this.burns = new Set();
     this.startedAt = null;
     this.advanceAt = null;
   }
@@ -37,9 +39,21 @@ export class RainTimeline {
       this.drops.set(offset, {
         char, start: now + delay, duration: 400 + this.random() * 340,
         height: 100 + this.random() * 150,
-        trail: Array.from({ length: 3 + Math.floor(this.random() * 5) }, () => glyphs[Math.floor(this.random() * glyphs.length)]).join('\n'),
+        trail: trails[Math.floor(this.random() * trails.length)],
       });
     });
+  }
+
+  remove(characters, now, reducedMotion = false) {
+    if (reducedMotion) return;
+    for (const position of characters) {
+      this.burns.add({
+        char: position.char, position, start: now + this.random() * 180,
+        duration: 500 + this.random() * 350, height: 100 + this.random() * 130,
+        drift: (this.random() - .5) * 110,
+        trail: trails[Math.floor(this.random() * trails.length)],
+      });
+    }
   }
 
   markComplete(now) {
@@ -55,13 +69,15 @@ export class RainTimeline {
   lastLanding() {
     let latest = 0;
     for (const drop of this.drops.values()) latest = Math.max(latest, drop.start + drop.duration);
+    for (const burn of this.burns) latest = Math.max(latest, burn.start + burn.duration);
     return latest;
   }
 
   state(now) {
     for (const [offset, drop] of this.drops) if (now >= drop.start + drop.duration) this.drops.delete(offset);
+    for (const burn of this.burns) if (now >= burn.start + burn.duration) this.burns.delete(burn);
     return {
-      pending: this.drops.size,
+      pending: this.drops.size + this.burns.size,
       completing: this.advanceAt !== null,
       ready: this.advanceAt !== null && now >= this.advanceAt,
     };
@@ -76,11 +92,13 @@ export class RainTimeline {
 
   settle(now) {
     this.drops.clear();
+    this.burns.clear();
     if (this.advanceAt !== null) this.advanceAt = Math.min(this.advanceAt, Math.max(now + completionPause, this.minimumEnd()));
   }
 
   clear() {
     this.drops.clear();
+    this.burns.clear();
     this.startedAt = null;
     this.advanceAt = null;
   }
