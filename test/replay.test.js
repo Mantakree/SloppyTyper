@@ -94,3 +94,71 @@ test('added ranges keep only written characters bright after mixed Unicode edits
   assert.equal(added, file.parts.filter(p => p.type === 'add').map(p => p.text).join(''));
   assert.ok(replay.added.every((range, i) => range.end > range.start && (!i || range.start > replay.added[i - 1].end)));
 });
+
+function replayParts(parts) {
+  return new Replay({ parts, total: parts.filter(p => p.type !== 'equal').reduce((n, p) => n + [...p.text].length, 0) });
+}
+function hints(replay) {
+  const { text, upcoming } = replay.view();
+  return upcoming.map(({ start, end }) => text.slice(start, end));
+}
+
+test('deletion hints shrink with typing and leave later edits dimmed', () => {
+  const replay = replayParts([
+    { type: 'equal', text: 'keep ' }, { type: 'remove', text: 'old🦊' },
+    { type: 'equal', text: ' middle ' }, { type: 'remove', text: 'later' },
+    { type: 'equal', text: ' end' },
+  ]);
+  assert.deepEqual(hints(replay), ['old🦊', 'later']);
+  replay.step(2);
+  assert.deepEqual(hints(replay), ['d🦊', 'later']);
+  replay.step(2);
+  assert.deepEqual(hints(replay), ['later']);
+  replay.step(50);
+  assert.deepEqual(hints(replay), []);
+});
+
+test('insertion hints mark whole Unicode neighbors and clear at the first inserted character', () => {
+  const replay = replayParts([
+    { type: 'equal', text: 'a🦊' }, { type: 'add', text: '123' }, { type: 'equal', text: '🦄z' },
+  ]);
+  assert.deepEqual(replay.view().upcoming, [{ start: 1, end: 5 }]);
+  assert.deepEqual(hints(replay), ['🦊🦄']);
+  assert.equal(replay.view(), replay.view(), 'hints are cached between keystrokes');
+  replay.step(1);
+  assert.deepEqual(hints(replay), []);
+  assert.equal(replay.view().text, 'a🦊1🦄z');
+  assert.deepEqual(replay.added, [{ start: 3, end: 4 }]);
+});
+
+test('replacement hints bracket surviving neighbors while old code burns away', () => {
+  const replay = replayParts([
+    { type: 'equal', text: '(A' }, { type: 'remove', text: 'old' },
+    { type: 'add', text: 'new' }, { type: 'equal', text: 'B)' },
+  ]);
+  assert.deepEqual(hints(replay), ['AoldB']);
+  replay.step(2);
+  assert.deepEqual(hints(replay), ['AdB']);
+  replay.step(1);
+  assert.deepEqual(hints(replay), ['AB']);
+  replay.step(1);
+  assert.deepEqual(hints(replay), []);
+});
+
+test('insertion hints handle file edges, adjacent edits, and empty new files', () => {
+  const replay = replayParts([
+    { type: 'add', text: 'first' }, { type: 'equal', text: '🦊' },
+    { type: 'add', text: 'middle' }, { type: 'equal', text: 'b' }, { type: 'add', text: 'last' },
+  ]);
+  assert.deepEqual(hints(replay), ['🦊b'], 'overlapping neighbor hints merge');
+  replay.step(5);
+  assert.deepEqual(hints(replay), ['🦊b']);
+  replay.step(6);
+  assert.deepEqual(hints(replay), ['b'], 'the final insertion only has a left neighbor');
+  replay.step(1);
+  assert.deepEqual(hints(replay), []);
+  const fresh = replayParts([{ type: 'add', text: 'brand new code' }]);
+  assert.deepEqual(hints(fresh), []);
+  fresh.step(1);
+  assert.deepEqual(hints(fresh), []);
+});

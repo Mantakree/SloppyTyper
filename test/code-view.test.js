@@ -107,3 +107,43 @@ test('written code stays highlighted and untouched source keeps its original sty
   assert.equal(state.text(), 'const value = 123; // unchanged');
   assert.deepEqual(charactersIn([{ offset: 3, text: ' 🦊\nA' }]), [{ offset: 4, char: '🦊' }, { offset: 7, char: 'A' }]);
 });
+
+test('upcoming text dims before edits and yields to the existing green rain and glow', () => {
+  const state = setup([
+    { type: 'equal', text: 'const value = (' }, { type: 'remove', text: 'old' },
+    { type: 'add', text: 'fresh' }, { type: 'equal', text: ');\nkeep🦊' },
+    { type: 'add', text: 'later' }, { type: 'equal', text: '🦄safe' },
+  ]);
+  const dimmed = () => [...state.code.querySelectorAll('.code-upcoming')].map(node => node.textContent).join('');
+  assert.equal(dimmed(), '(old)🦊🦄');
+  state.step(3, 0);
+  assert.equal(dimmed(), '()🦊🦄');
+  state.step(1, 20);
+  assert.equal(dimmed(), '🦊🦄');
+  assert.equal(state.code.querySelector('.rain-pending').textContent, 'f');
+  state.render(5000);
+  assert.equal(state.code.querySelector('.code-added').textContent, 'f');
+  assert.equal(dimmed(), '🦊🦄');
+  state.step(50, 5010);
+  state.render(10000);
+  assert.equal(dimmed(), '');
+  assert.equal(state.text(), 'const value = (fresh);\nkeep🦊later🦄safe');
+  const restarted = new Replay(state.replay.file);
+  state.view.render(restarted, new Map());
+  assert.equal(dimmed(), '(old)🦊🦄', 'restart restores all upcoming hints');
+});
+
+test('large pending deletions use one hint span per visible line and retain untouched rows', () => {
+  const state = setup([
+    { type: 'equal', text: '// keep\n' },
+    { type: 'remove', text: ('x'.repeat(200) + '\n').repeat(1200) },
+    { type: 'equal', text: '// end' },
+  ]);
+  const untouchedRow = state.code.children[100];
+  const untouchedHint = untouchedRow.querySelector('.code-upcoming');
+  assert.ok(state.code.querySelectorAll('.code-upcoming').length <= 170, 'windowed ranges, not individual characters');
+  state.step(20, 0);
+  assert.equal(state.code.children[100], untouchedRow);
+  assert.equal(untouchedRow.querySelector('.code-upcoming'), untouchedHint);
+  assert.ok(state.code.querySelectorAll('.code-upcoming').length <= 170);
+});

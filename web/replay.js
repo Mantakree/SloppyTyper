@@ -51,11 +51,41 @@ export class Replay {
   get done() { return this.progress >= this.total; }
   view() {
     if (this.cachedView) return this.cachedView;
-    let suffix = '';
+    const chunks = [this.prefix], edits = [];
+    let position = this.prefix.length, edit = null;
     for (let i = this.index; i < this.parts.length; i++) {
       const part = this.parts[i];
-      if (part.type !== 'add') suffix += i === this.index ? part.chars.slice(this.offset).join('') : part.text;
+      if (part.type === 'equal') {
+        edit = null;
+      } else {
+        // A replacement's adjacent remove/add parts share the same surviving
+        // neighbors, even while its old characters are disappearing.
+        if (!edit) { edit = { start: position, end: position, insertion: false }; edits.push(edit); }
+        if (part.type === 'add' && (i !== this.index || this.offset === 0)) edit.insertion = true;
+      }
+      if (part.type !== 'add') {
+        const visible = i === this.index ? part.chars.slice(this.offset).join('') : part.text;
+        chunks.push(visible);
+        position += visible.length;
+        if (edit) edit.end = position;
+      }
     }
-    return this.cachedView = { text: this.prefix + suffix, cursor: this.prefix.length, operation: this.parts[this.index]?.type ?? 'equal' };
+    const text = chunks.join(''), upcoming = [];
+    for (const edit of edits) {
+      let { start, end } = edit;
+      if (edit.insertion) {
+        // Hints disappear when insertion starts. Never dim already-written
+        // characters, and keep UTF-16 ranges on complete Unicode code points.
+        if (start > 0 && !(start === this.prefix.length && this.added.at(-1)?.end === start)) {
+          start -= start > 1 && text.codePointAt(start - 2) > 0xffff ? 2 : 1;
+        }
+        if (end < text.length) end += text.codePointAt(end) > 0xffff ? 2 : 1;
+      }
+      if (start === end) continue;
+      const previous = upcoming.at(-1);
+      if (previous && previous.end >= start) previous.end = Math.max(previous.end, end);
+      else upcoming.push({ start, end });
+    }
+    return this.cachedView = { text, cursor: this.prefix.length, operation: this.parts[this.index]?.type ?? 'equal', upcoming };
   }
 }

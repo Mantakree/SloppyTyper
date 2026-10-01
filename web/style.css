@@ -324,6 +324,10 @@ pre {
   color: #72ff93;
   text-shadow: 0 0 5px #38ff7275, 0 0 11px #38ff7225;
 }
+.code-upcoming {
+  color: #3e6849;
+  text-shadow: none;
+}
 .rain-pending {
   visibility: hidden;
   color: transparent;

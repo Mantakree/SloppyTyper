@@ -95,7 +95,7 @@ export class CodeView {
       this.layoutVersion++;
       this.element.replaceChildren();
     }
-    const { text, cursor } = replay.view();
+    const { text, cursor, upcoming } = replay.view();
     const allLines = text.split('\n');
     const cursorLine = text.slice(0, cursor).split('\n').length - 1;
     const start = allLines.length > 1000 ? Math.max(0, cursorLine - 80) : 0;
@@ -103,7 +103,7 @@ export class CodeView {
     if (this.start !== start) this.layoutVersion++;
     this.start = start;
     const falling = [...drops].sort((a, b) => a[0] - b[0]);
-    let position = 0, dropIndex = 0, addedIndex = 0;
+    let position = 0, dropIndex = 0, addedIndex = 0, upcomingIndex = 0;
     const lines = [];
     for (let i = 0; i < end; i++) {
       const line = allLines[i], runs = [], pending = [];
@@ -113,6 +113,7 @@ export class CodeView {
         if (offset >= position) pending.push({ start: offset - position, end: offset - position + drop.char.length });
       }
       while (addedIndex < replay.added.length && replay.added[addedIndex].end <= position) addedIndex++;
+      while (upcomingIndex < upcoming.length && upcoming[upcomingIndex].end <= position) upcomingIndex++;
       if (i >= start) {
         // Whole runs share a single span; no per-character DOM or CSS animation.
         for (let a = addedIndex; a < replay.added.length && replay.added[a].start < limit; a++) {
@@ -133,6 +134,12 @@ export class CodeView {
             next = hidden.end;
           }
           push(next, to, 'code-added');
+        }
+        // Upcoming edits follow all written ranges. Both use whole spans so
+        // previewing a large deletion never creates one element per character.
+        for (let u = upcomingIndex; u < upcoming.length && upcoming[u].start < limit; u++) {
+          runs.push({ start: Math.max(position, upcoming[u].start) - position,
+            end: Math.min(limit, upcoming[u].end) - position, kind: 'code-upcoming' });
         }
         lines.push({ text: line, position, number: i + 1, runs, caret: i === cursorLine && !replay.done ? cursor - position : -1 });
       }
