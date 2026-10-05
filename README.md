@@ -37,6 +37,8 @@ The start hook snapshots current source, including pre-existing dirty files. The
 
 “Conversation closes” means the assistant finishes a turn. Each later turn gets a new baseline. Concurrent edits in the same checkout can also appear; separate worktrees avoid mixing unrelated work.
 
+When a host supplies no turn ID, additional prompts before `Stop` keep the original pending baseline, including background subagent reports. A pending baseline expires four hours after capture and is replaced on the next prompt. This is a fallback for interrupted turns that never send `Stop`: resuming sooner can include earlier edits, while a prompt during a turn longer than four hours starts a fresh baseline. Manual `begin` always takes a fresh snapshot.
+
 Integration references: [Codex hooks](https://learn.chatgpt.com/docs/hooks), [Claude Code hooks](https://code.claude.com/docs/en/hooks).
 
 ## Manual replays

@@ -31,7 +31,7 @@ function reconcile(parent, children) {
 }
 
 function sameLine(a, b) {
-  return a.text === b.text && a.caret === b.caret && a.runs.length === b.runs.length
+  return a.text === b.text && a.caret === b.caret && a.anchor === b.anchor && a.runs.length === b.runs.length
     && a.runs.every((run, i) => run.start === b.runs[i].start && run.end === b.runs[i].end && run.kind === b.runs[i].kind);
 }
 
@@ -43,6 +43,8 @@ export class CodeView {
     this.layoutVersion = 0;
     this.caret = this.document.createElement('span');
     this.caret.className = 'caret';
+    this.scrollAnchor = this.document.createElement('span');
+    this.scrollAnchor.className = 'scroll-anchor';
   }
 
   updateRow(line, previous) {
@@ -73,8 +75,13 @@ export class CodeView {
       }
       children.push(...highlighted(this.document, line.text.slice(start, end)));
     };
-    if (line.caret < 0) append(0, line.text.length);
-    else { append(0, line.caret); children.push(this.caret); append(line.caret, line.text.length); }
+    const marker = line.caret >= 0 ? line.caret : line.anchor;
+    if (marker < 0) append(0, line.text.length);
+    else {
+      append(0, marker);
+      children.push(line.caret >= 0 ? this.caret : this.scrollAnchor);
+      append(marker, line.text.length);
+    }
     reconcile(content, children);
     let offset = 0;
     const source = [];
@@ -95,11 +102,11 @@ export class CodeView {
       this.layoutVersion++;
       this.element.replaceChildren();
     }
-    const { text, cursor, upcoming } = replay.view();
+    const { text, cursor, anchor, upcoming } = replay.view();
     const allLines = text.split('\n');
-    const cursorLine = text.slice(0, cursor).split('\n').length - 1;
-    const start = allLines.length > 1000 ? Math.max(0, cursorLine - 80) : 0;
-    const end = allLines.length > 1000 ? Math.min(allLines.length, cursorLine + 170) : allLines.length;
+    const anchorLine = text.slice(0, anchor).split('\n').length - 1;
+    const start = allLines.length > 1000 ? Math.max(0, anchorLine - 80) : 0;
+    const end = allLines.length > 1000 ? Math.min(allLines.length, anchorLine + 170) : allLines.length;
     if (this.start !== start) this.layoutVersion++;
     this.start = start;
     const falling = [...drops].sort((a, b) => a[0] - b[0]);
@@ -141,7 +148,9 @@ export class CodeView {
           runs.push({ start: Math.max(position, upcoming[u].start) - position,
             end: Math.min(limit, upcoming[u].end) - position, kind: 'code-upcoming' });
         }
-        lines.push({ text: line, position, number: i + 1, runs, caret: i === cursorLine && !replay.done ? cursor - position : -1 });
+        lines.push({ text: line, position, number: i + 1, runs,
+          caret: i === anchorLine && !replay.done ? cursor - position : -1,
+          anchor: i === anchorLine && replay.done ? anchor - position : -1 });
       }
       position = limit + 1;
     }
@@ -159,7 +168,7 @@ export class CodeView {
     });
     reconcile(this.element, rows.map(({ row }) => row));
     this.rows = rows;
-    return { text, active: replay.done ? null : this.caret };
+    return { text, active: replay.done ? null : this.caret, scrollTarget: replay.done ? this.scrollAnchor : this.caret };
   }
 
   // Return source glyph coordinates in scroll-content space. Only call between
