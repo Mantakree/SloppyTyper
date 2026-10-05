@@ -103,6 +103,36 @@ function hints(replay) {
   return upcoming.map(({ start, end }) => text.slice(start, end));
 }
 
+test('completion anchors stay at the last edit before an untouched suffix at every speed', () => {
+  const first = 'header 🦊\r\n', middle = '\r\nunchanged\r\n', suffix = '\r\ntail\n'.repeat(1200);
+  for (const last of [[{ type: 'add', text: 'new🦄' }], [{ type: 'remove', text: 'old🦊' }],
+    [{ type: 'remove', text: 'old' }, { type: 'add', text: 'new🦄\n' }]]) {
+    const parts = [{ type: 'equal', text: first }, { type: 'add', text: 'earlier' }, { type: 'equal', text: middle },
+      ...last, { type: 'equal', text: suffix }];
+    const expected = first.length + 'earlier'.length + middle.length + last.filter(p => p.type === 'add').reduce((n, p) => n + p.text.length, 0);
+    for (const speed of [1, 5, 10, 20, 50, Infinity]) {
+      const replay = replayParts(parts);
+      while (!replay.done) {
+        assert.equal(replay.view().anchor, replay.view().cursor);
+        replay.step(speed === Infinity ? replay.total : speed); // Same path as Skip.
+      }
+      assert.equal(replay.view().anchor, expected);
+      assert.equal(replay.view().cursor, expected + suffix.length);
+      assert.equal(replay.view().text, parts.filter(p => p.type !== 'remove').map(p => p.text).join(''));
+      replay.step(50);
+      assert.equal(replay.view().anchor, expected, 'extra keys leave the completed anchor alone');
+    }
+  }
+});
+
+test('completion anchors handle empty files and changes at EOF', () => {
+  for (const parts of [[], [{ type: 'add', text: '🦊\n' }], [{ type: 'remove', text: '🦊\n' }]]) {
+    const replay = new Replay({ parts, total: Math.max(1, parts.reduce((n, p) => n + [...p.text].length, 0)) });
+    replay.step(replay.total);
+    assert.equal(replay.view().anchor, replay.view().text.length);
+  }
+});
+
 test('deletion hints shrink with typing and leave later edits dimmed', () => {
   const replay = replayParts([
     { type: 'equal', text: 'keep ' }, { type: 'remove', text: 'old🦊' },

@@ -29,12 +29,12 @@ function scheduleLanding(now) {
 
 function renderCode(now) {
   const replay = replays[current];
-  const { text, active } = codeView.render(replay, rain.drops, now);
+  const { text, scrollTarget } = codeView.render(replay, rain.drops, now);
   $('empty-code').hidden = text.length !== 0;
   $('empty-code').textContent = replay.done && replay.file.kind === 'deleted' ? 'File deleted.' : 'New file. Press any key to begin.';
-  if (followCursor && active) {
+  if (followCursor && scrollTarget) {
     const viewport = $('code-scroll');
-    const top = active.getBoundingClientRect().top - viewport.getBoundingClientRect().top;
+    const top = scrollTarget.getBoundingClientRect().top - viewport.getBoundingClientRect().top;
     if (top < 25 || top > viewport.clientHeight - 50) viewport.scrollTop += top - viewport.clientHeight / 3;
   }
   followCursor = false;

@@ -309,6 +309,12 @@ pre {
 .syntax-number {
   color: #d3dd9b;
 }
+.scroll-anchor {
+  display: inline-block;
+  width: 0;
+  height: 1em;
+  pointer-events: none;
+}
 .caret {
   display: inline-block;
   width: 7px;

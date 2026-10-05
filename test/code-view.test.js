@@ -108,6 +108,40 @@ test('written code stays highlighted and untouched source keeps its original sty
   assert.deepEqual(charactersIn([{ offset: 3, text: ' 🦊\nA' }]), [{ offset: 4, char: '🦊' }, { offset: 7, char: 'A' }]);
 });
 
+test('completed large files keep the last edit window and a scroll target without a caret', () => {
+  for (const type of ['add', 'remove']) {
+    for (const speed of [1, 50]) {
+      const state = setup([{ type: 'equal', text: '// header\n' }, { type, text: 'change 🦊' },
+        { type: 'equal', text: '\ntail\n'.repeat(800) }]);
+      while (!state.replay.done) state.step(speed, 0);
+      const { active, scrollTarget } = state.render(5000);
+      assert.equal(state.view.rows[0].number, 1, 'the window stays at the edit near the top');
+      assert.ok(state.code.children.length <= 250);
+      assert.equal(active, null);
+      assert.equal(state.code.querySelector('.caret'), null);
+      assert.equal(state.code.querySelectorAll('.scroll-anchor').length, 1);
+      assert.ok(state.code.contains(scrollTarget));
+      assert.equal(scrollTarget.parentNode, state.view.rows[1].content);
+      assert.equal(scrollTarget.previousSibling?.textContent ?? '', type === 'add' ? 'change 🦊' : '');
+      assert.equal(state.text().includes('change 🦊'), type === 'add');
+    }
+  }
+});
+
+test('completion scroll targets mark the exact column on long wrapping lines', () => {
+  const prefix = 'word '.repeat(500) + '🦊';
+  const state = setup([{ type: 'equal', text: prefix }, { type: 'add', text: 'new🦄' }, { type: 'equal', text: ' tail' }]);
+  state.replay.step(state.replay.total);
+  const { scrollTarget } = state.render(5000);
+  const children = [...scrollTarget.parentNode.childNodes];
+  assert.equal(children.slice(0, children.indexOf(scrollTarget)).map(node => node.textContent).join(''), prefix + 'new🦄');
+  assert.equal(scrollTarget.textContent, '');
+  assert.equal(state.text(), prefix + 'new🦄 tail');
+  state.view.render(new Replay({ parts: [{ type: 'add', text: 'reset' }], total: 5 }), new Map());
+  assert.equal(state.code.querySelector('.scroll-anchor'), null, 'switching files removes the old target');
+  assert.equal(state.code.querySelectorAll('.caret').length, 1);
+});
+
 test('upcoming text dims before edits and yields to the existing green rain and glow', () => {
   const state = setup([
     { type: 'equal', text: 'const value = (' }, { type: 'remove', text: 'old' },

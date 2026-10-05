@@ -1,4 +1,5 @@
 import copy
+from datetime import datetime, timedelta, timezone
 import hashlib
 import json
 import os
@@ -9,9 +10,9 @@ import sys
 import tempfile
 import time
 import unittest
-from unittest.mock import patch
+from unittest.mock import Mock, patch
 
-from src.hooks import begin, finish, handle_hook
+from src.hooks import PENDING_MAX_AGE, begin, finish, handle_hook
 from src.integrations import hook_command, install
 from src.session import diff_parts, make_session
 from src.snapshot import is_source, repo_root, snapshot
@@ -41,6 +42,7 @@ class RepositoryTests(unittest.TestCase):
         self.write('.gitignore', 'ignored.js\n')
         self.git('add', '.')
         self.git('commit', '-m', 'fixture')
+        self.launcher = Mock(return_value='C:/saved/replay.html')
 
     def git(self, *args):
         return subprocess.check_output(['git', '-C', str(self.repo), *args], stderr=subprocess.PIPE,
@@ -57,6 +59,113 @@ class RepositoryTests(unittest.TestCase):
 
     def tree_bytes(self):
         return {str(p.relative_to(self.repo)): p.read_bytes() for p in self.repo.rglob('*') if p.is_file()}
+
+    def hook(self, event, source='claude', **fields):
+        payload = dict(session_id='hook-turn', cwd=str(self.repo), hook_event_name=event, **fields)
+        return handle_hook(payload, source, launch_viewer=self.launcher)
+
+    def test_mid_turn_prompts_preserve_all_edits_without_turn_ids(self):
+        for source in ('claude', 'codex'):
+            with self.subTest(source=source):
+                self.write('app.js', 'original\n')
+                self.hook('UserPromptSubmit', source)
+                path = state_path(repo_root(self.repo), source, 'hook-turn')
+                baseline = path.read_bytes()
+                self.write('app.js', 'original\nedit A\n')
+                self.hook('UserPromptSubmit', source)
+                self.assertEqual(path.read_bytes(), baseline)
+                self.write('app.js', 'original\nedit A\nedit B\n')
+                self.hook('Stop', source)
+                file = self.launcher.call_args.args[0]['files'][0]
+                self.assertEqual(file['before'], 'original\n')
+                self.assertEqual(file['after'], 'original\nedit A\nedit B\n')
+                self.assertFalse(read_json(path).get('pending', False))
+                calls = self.launcher.call_count
+                self.hook('Stop', source)
+                self.assertEqual(self.launcher.call_count, calls)
+
+    def test_stop_consumes_pending_baseline_even_without_changes(self):
+        for changed in (False, True):
+            with self.subTest(changed=changed):
+                self.hook('UserPromptSubmit')
+                if changed:
+                    self.write('app.js', 'first turn\n')
+                self.hook('Stop')
+                path = state_path(repo_root(self.repo), 'claude', 'hook-turn')
+                self.assertFalse(read_json(path).get('pending', False))
+                self.write('app.js', 'between turns\n')
+                self.hook('UserPromptSubmit')
+                self.write('app.js', 'second turn\n')
+                self.hook('Stop')
+                self.assertEqual(self.launcher.call_args.args[0]['files'][0]['before'], 'between turns\n')
+
+    def test_stale_pending_baseline_is_replaced_after_interruption(self):
+        self.hook('UserPromptSubmit')
+        path = state_path(repo_root(self.repo), 'claude', 'hook-turn')
+        baseline = read_json(path)
+        baseline['capturedAt'] = (datetime.now(timezone.utc) - PENDING_MAX_AGE - timedelta(seconds=1)).isoformat()
+        write_json(path, baseline)
+        self.write('app.js', 'interrupted work\n')
+        self.hook('UserPromptSubmit')
+        self.assertTrue(read_json(path)['pending'])
+        self.write('app.js', 'new work\n')
+        self.hook('Stop')
+        self.assertEqual(self.launcher.call_args.args[0]['files'][0]['before'], 'interrupted work\n')
+
+    def test_legacy_and_invalid_pending_states_take_a_fresh_baseline(self):
+        path = state_path(repo_root(self.repo), 'claude', 'hook-turn')
+        states = [{}, {'pending': False}, {'pending': True, 'capturedAt': None},
+                  {'pending': True, 'capturedAt': 'invalid'}, {'pending': True, 'capturedAt': '2026-01-01'},
+                  {'pending': True, 'capturedAt': (datetime.now(timezone.utc) + timedelta(days=1)).isoformat()}]
+        for fields in states:
+            with self.subTest(fields=fields):
+                self.write('app.js', 'old baseline\n')
+                write_json(path, {**snapshot(self.repo), **fields})
+                self.write('app.js', 'fresh baseline\n')
+                self.hook('UserPromptSubmit')
+                self.assertEqual(read_json(path)['files']['app.js'], 'fresh baseline\n')
+                self.assertTrue(read_json(path)['pending'])
+
+    def test_codex_turn_ids_keep_baselines_separate_and_preserve_repeated_prompts(self):
+        self.hook('UserPromptSubmit', 'codex', turn_id='one')
+        self.write('app.js', 'first edit\n')
+        self.hook('UserPromptSubmit', 'codex', turn_id='one')
+        self.hook('Stop', 'codex', turn_id='one')
+        self.assertEqual(self.launcher.call_args.args[0]['files'][0]['before'], 'const answer = 1;\n')
+        self.write('app.js', 'between turns\n')
+        self.hook('UserPromptSubmit', 'codex', turn_id='two')
+        self.write('app.js', 'second edit\n')
+        self.hook('Stop', 'codex', turn_id='two')
+        self.assertEqual(self.launcher.call_args.args[0]['files'][0]['before'], 'between turns\n')
+
+    def test_manual_begin_always_replaces_its_baseline(self):
+        for text in ('first baseline\n', 'second baseline\n'):
+            self.write('app.js', text)
+            result = self.cli('begin', '--session', 'manual-turn')
+            self.assertEqual(result.returncode, 0, result.stderr)
+            baseline = read_json(state_path(repo_root(self.repo), 'manual', 'manual-turn'))
+            self.assertEqual(baseline['files']['app.js'], text)
+            self.assertNotIn('pending', baseline)
+        result = self.cli('end', '--session', 'manual-turn', '--no-open')
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertIn(b'No source changes', result.stdout)
+
+    def test_xaml_and_dotnet_sources_are_captured_from_commits_and_worktree(self):
+        names = [f'View{i}.{extension}' for i, extension in enumerate(('xaml', 'XAML', 'resx', 'csproj', 'props', 'targets', 'vb', 'razor', 'cshtml'))]
+        for name in names:
+            self.write(name, '<View>before</View>\n')
+        self.git('add', '.')
+        self.git('commit', '-m', 'dotnet fixtures')
+        before = snapshot(self.repo, ref='HEAD')
+        for name in names:
+            self.write(name, '<View>after</View>\n')
+        initial = self.tree_bytes()
+        session = make_session(before, snapshot(self.repo))
+        self.assertEqual({file['path'] for file in session['files']}, set(names))
+        for file in session['files']:
+            self.assertEqual(file['before'], '<View>before</View>\n')
+            self.assertEqual(file['after'], '<View>after</View>\n')
+        self.assertEqual(self.tree_bytes(), initial)
 
     def test_capture_and_launch_leave_every_repository_byte_unchanged(self):
         self.write('app.js', 'staged();\n')

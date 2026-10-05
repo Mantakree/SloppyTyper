@@ -6,6 +6,7 @@ export class Replay {
     this.index = 0;
     this.offset = 0;
     this.prefix = '';
+    this.lastEdit = 0;
     this.progress = 0;
     this.total = file.total;
     this.added = [];
@@ -43,6 +44,8 @@ export class Replay {
       this.offset += take;
       this.progress += take;
       remaining -= take;
+      // Save the edit boundary before skipEqual consumes untouched source.
+      this.lastEdit = this.prefix.length;
       if (this.offset === part.chars.length) { this.index++; this.offset = 0; this.skipEqual(); }
     }
     this.cachedView = null;
@@ -86,6 +89,7 @@ export class Replay {
       if (previous && previous.end >= start) previous.end = Math.max(previous.end, end);
       else upcoming.push({ start, end });
     }
-    return this.cachedView = { text, cursor: this.prefix.length, operation: this.parts[this.index]?.type ?? 'equal', upcoming };
+    return this.cachedView = { text, cursor: this.prefix.length, anchor: this.done ? this.lastEdit : this.prefix.length,
+      operation: this.parts[this.index]?.type ?? 'equal', upcoming };
   }
 }

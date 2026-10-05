@@ -6,6 +6,7 @@ import re
 import subprocess
 
 EXTENSIONS = set('js jsx mjs cjs ts tsx mts cts py rs go c h cpp hpp cc cs fs fsx java kt kts swift rb php lua sh bash zsh ps1 psm1 sql html htm css scss sass less vue svelte astro json jsonc yaml yml toml xml graphql gql proto ex exs erl hrl clj cljs dart r scala rkt zig nix ml mli tf hcl tex md mdx'.split())
+EXTENSIONS.update('xaml resx csproj props targets vb razor cshtml'.split())
 NAMES = {'Dockerfile', 'Containerfile', 'Makefile', 'CMakeLists.txt', 'Justfile', '.gitignore', '.gitattributes', '.editorconfig'}
 IGNORED_DIRS = re.compile(r'(^|/)(node_modules|vendor|dist|build|coverage|\.git|\.next|\.nuxt|\.venv|venv|__pycache__|\.codex|\.claude|\.agents)(/|$)')
 SENSITIVE = re.compile(r'(^|[/._-])(secrets?|credentials?|tokens?|id_rsa|id_ed25519)([/._-]|$)|(^|/)\.env($|\.)', re.I)
